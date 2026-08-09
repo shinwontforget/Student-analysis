@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   cgpa          numeric(4,2) NOT NULL DEFAULT 0
                               CHECK (cgpa >= 0 AND cgpa <= 10),
   is_premium    boolean      NOT NULL DEFAULT false,
+  premium_expires_at timestamptz,
   created_at    timestamptz  NOT NULL DEFAULT now(),
   updated_at    timestamptz  NOT NULL DEFAULT now()
 );
