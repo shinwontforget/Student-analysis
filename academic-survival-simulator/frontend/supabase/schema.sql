@@ -81,6 +81,7 @@ CREATE POLICY "daily_assessments: owner all"
 CREATE TABLE IF NOT EXISTS public.critical_thinking_submissions (
   id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  challenge_id     text        NOT NULL DEFAULT 'default_challenge',
   prompt           text        NOT NULL,
   response         text        NOT NULL,
   gemini_feedback  text,
