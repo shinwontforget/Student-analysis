@@ -1,13 +1,12 @@
 'use client'
 
-import React, { useState, useTransition } from 'react'
+import React, { useState, useTransition, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2, Terminal, Zap } from 'lucide-react'
-import Logo from '@/components/Logo'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? '/dashboard'
@@ -155,5 +154,19 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#070712] text-zinc-400 font-mono">
+          <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   )
 }
