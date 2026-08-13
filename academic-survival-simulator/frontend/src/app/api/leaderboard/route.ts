@@ -9,35 +9,59 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    // Query top 50 leaderboard entries ordered by score descending
-    const { data: entries, error } = await supabase
-      .from('leaderboard')
-      .select('id, user_id, display_name, score, rank, period, updated_at')
-      .order('score', { ascending: false })
-      .limit(50)
+    // Query users and Critical Thinking submissions
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, full_name, avatar_id, cgpa, student_level, student_field')
 
-    if (error) {
-      console.error('[Leaderboard GET] Database query error:', error)
-      return NextResponse.json(
-        { error: 'Failed to retrieve leaderboard data' },
-        { status: 500 }
-      )
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
+
+    const { data: ctSubmissions } = await supabase
+      .from('critical_thinking_submissions')
+      .select('user_id, quality_score, uniqueness_score')
+      .gte('created_at', startOfMonth.toISOString())
+
+    const userMap = new Map<string, {
+      id: string
+      name: string
+      cgpa: number
+      score: number
+    }>()
+
+    if (users) {
+      users.forEach((u) => {
+        userMap.set(u.id, {
+          id: u.id,
+          name: u.full_name || 'Scholar',
+          cgpa: Number(u.cgpa) || 3.0,
+          score: 0,
+        })
+      })
     }
 
-    // Enhance records with calculated rank and class titles
-    const formattedLeaderboard = (entries || []).map((entry, index) => {
-      const cgpaEquivalent = entry.score / 100.0
-      return {
+    if (ctSubmissions) {
+      ctSubmissions.forEach((s) => {
+        const existing = userMap.get(s.user_id)
+        if (existing) {
+          existing.score += (s.quality_score ?? 0) + (s.uniqueness_score ?? 0)
+        }
+      })
+    }
+
+    const formattedLeaderboard = Array.from(userMap.values())
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((entry, index) => ({
         rank: index + 1,
         id: entry.id,
-        user_id: entry.user_id,
-        display_name: entry.display_name,
+        user_id: entry.id,
+        display_name: entry.name,
         score: entry.score,
-        cgpa: Math.min(10.0, Math.max(0.0, Number(cgpaEquivalent.toFixed(2)))),
-        class_title: GamificationEngine.getClassTitle(cgpaEquivalent),
-        updated_at: entry.updated_at,
-      }
-    })
+        cgpa: entry.cgpa,
+        class_title: GamificationEngine.getClassTitle(entry.cgpa),
+      }))
 
     return NextResponse.json(
       {

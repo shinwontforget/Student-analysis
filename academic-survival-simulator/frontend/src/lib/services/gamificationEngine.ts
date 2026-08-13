@@ -142,6 +142,67 @@ export class GamificationEngine {
   }
 
   /**
+   * Calculates student Energy (%) and Stress (%) levels based on daily sliders.
+   * Inputs:
+   *  - sleep (0-12 hours)
+   *  - study (0-14 hours)
+   *  - coffee (0-10 cups)
+   *  - gaming (0-10 hours)
+   */
+  static calculateEnergyStress(inputs: {
+    sleep: number
+    study: number
+    coffee: number
+    gaming: number
+  }): { energy: number; stress: number } {
+    const { sleep, study, coffee, gaming } = inputs
+
+    // 1. Calculate Energy (0 - 100%)
+    // Base energy from sleep (8 hours = 60 energy, up to 10h = +10)
+    let sleepEnergy = Math.min(70, Math.round((sleep / 8) * 60))
+    if (sleep > 8) {
+      sleepEnergy = Math.min(70, 60 + (sleep - 8) * 5)
+    }
+
+    // Coffee energy boost with crash penalty for >4 cups
+    let coffeeEnergy = coffee <= 4 ? coffee * 8 : 32 - (coffee - 4) * 6
+
+    // Study energy cost
+    const studyEnergyDrain = study * 4.5
+
+    // Gaming energy impact: moderate (+2/h up to 3h), heavy (-4/h after 3h)
+    let gamingEnergy = gaming <= 3 ? gaming * 2 : 6 - (gaming - 3) * 4
+
+    let totalEnergy = sleepEnergy + coffeeEnergy - studyEnergyDrain + gamingEnergy
+    const energy = Math.max(0, Math.min(100, Math.round(totalEnergy)))
+
+    // 2. Calculate Stress (0 - 100%)
+    let baseStress = 15
+
+    // Study load adds stress
+    const studyStress = study * 6.5
+
+    // Sleep deficit adds stress
+    const sleepDeficitStress = sleep < 7 ? (7 - sleep) * 8.5 : 0
+
+    // Coffee jitters (>3 cups adds stress)
+    const coffeeJittersStress = coffee > 3 ? (coffee - 3) * 7.5 : 0
+
+    // Gaming stress relief (up to 3h reduces stress, >4h adds stress)
+    let gamingStress = 0
+    if (gaming <= 3) {
+      gamingStress = -gaming * 5.5
+    } else {
+      gamingStress = -16.5 + (gaming - 3) * 8
+    }
+
+    let totalStress = baseStress + studyStress + sleepDeficitStress + coffeeJittersStress + gamingStress
+    const stress = Math.max(0, Math.min(100, Math.round(totalStress)))
+
+    return { energy, stress }
+  }
+
+  /**
    * Full gamification profile snapshot.
    */
   static getGamificationState(params: {
@@ -161,3 +222,4 @@ export class GamificationEngine {
     }
   }
 }
+

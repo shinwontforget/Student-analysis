@@ -65,4 +65,33 @@ describe('GamificationEngine', () => {
       expect(effects).toHaveLength(0)
     })
   })
+
+  describe('calculateEnergyStress', () => {
+    it('computes high energy and low stress for optimal habits (8h sleep, 4h study, 2 cups coffee, 2h gaming)', () => {
+      const { energy, stress } = GamificationEngine.calculateEnergyStress({
+        sleep: 8,
+        study: 4,
+        coffee: 2,
+        gaming: 2,
+      })
+
+      expect(energy).toBeGreaterThanOrEqual(60)
+      expect(energy).toBeLessThanOrEqual(100)
+      expect(stress).toBeGreaterThanOrEqual(0)
+      expect(stress).toBeLessThanOrEqual(50)
+    })
+
+    it('computes low energy and high stress for zero sleep and high coffee', () => {
+      const { energy, stress } = GamificationEngine.calculateEnergyStress({
+        sleep: 2,
+        study: 10,
+        coffee: 8,
+        gaming: 6,
+      })
+
+      expect(energy).toBeLessThan(40)
+      expect(stress).toBeGreaterThan(60)
+    })
+  })
 })
+

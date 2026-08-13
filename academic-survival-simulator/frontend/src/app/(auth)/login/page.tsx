@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import React, { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Terminal, Zap } from 'lucide-react'
+import Logo from '@/components/Logo'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -24,7 +24,7 @@ export default function LoginPage() {
     setError(null)
 
     startTransition(async () => {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -34,29 +34,63 @@ export default function LoginPage() {
         return
       }
 
-      // Refresh the router so the middleware can pick up the new session cookie.
+      // Check if user has logged their habits before (returning user vs first-time user)
+      if (authData.user) {
+        const { count } = await supabase
+          .from('daily_habit_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', authData.user.id)
+
+        if (!count || count === 0) {
+          // First-time user: redirect to habit onboarding to choose study, sleep, coffee, gaming & get predicted CGPA
+          router.refresh()
+          router.push('/onboarding')
+          return
+        }
+      }
+
       router.refresh()
       router.push(next)
     })
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 shadow-sm">
-        <h1 className="mb-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Sign in
-        </h1>
-        <p className="mb-6 text-sm text-zinc-500 dark:text-zinc-400">
-          Enter your email and password to continue.
-        </p>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-[#070712] text-zinc-100 p-4 font-mono select-none">
+      {/* Top Terminal Icon Glow Box */}
+      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/40 bg-violet-600/10 text-violet-400 shadow-[0_0_30px_rgba(139,92,246,0.25)]">
+        <Terminal className="h-7 w-7" />
+      </div>
+
+      {/* Main Title Header */}
+      <h1 className="text-2xl sm:text-3xl font-black tracking-widest uppercase text-white mb-1 text-center">
+        ACADEMIC_SURVIVAL.EXE
+      </h1>
+      <p className="text-[11px] text-zinc-400 tracking-widest uppercase mb-8 text-center max-w-sm">
+        BUILD YOUR SEMESTER. SEE WHAT BREAKS FIRST.
+      </p>
+
+      {/* Main Card Container */}
+      <div className="w-full max-w-md rounded-3xl border border-violet-500/30 bg-[#0d0c1d]/90 p-8 shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-2xl">
+        {/* Tab Toggle: LOG IN | START YOUR JOURNEY */}
+        <div className="mb-6 grid grid-cols-2 rounded-xl bg-[#070712] p-1 border border-white/10 text-[10px] font-bold uppercase tracking-wider">
+          <button className="rounded-lg bg-[#15132b] py-2.5 text-white shadow-md border border-white/10 font-black">
+            LOG IN
+          </button>
+          <Link
+            href="/signup"
+            className="rounded-lg py-2.5 text-center text-zinc-500 hover:text-zinc-300 transition-colors flex items-center justify-center gap-1"
+          >
+            <Zap className="h-3 w-3 text-violet-400" /> START YOUR JOURNEY
+          </Link>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label
               htmlFor="email"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400"
             >
-              Email
+              EMAIL
             </label>
             <input
               id="email"
@@ -65,17 +99,17 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-              placeholder="you@example.com"
+              className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 font-mono"
+              placeholder="student@campus.edu"
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label
               htmlFor="password"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400"
             >
-              Password
+              PASSWORD
             </label>
             <input
               id="password"
@@ -84,34 +118,39 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+              className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 font-mono"
               placeholder="••••••••"
             />
           </div>
 
           {error && (
-            <p className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2 text-sm text-red-600 dark:text-red-400">
-              {error}
-            </p>
+            <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 text-xs text-rose-300">
+              ⚠️ {error}
+            </div>
           )}
 
-          <Button
+          <button
             type="submit"
             disabled={isPending}
-            className="w-full"
+            className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-[0_0_20px_rgba(139,92,246,0.4)] hover:bg-violet-500 active:scale-[0.99] disabled:opacity-50 transition-all"
           >
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign in
-          </Button>
+            {isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> ENTERING SIMULATION...
+              </>
+            ) : (
+              'ENTER SIMULATION'
+            )}
+          </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          Don&apos;t have an account?{' '}
+        <p className="mt-6 text-center text-xs font-sans text-zinc-500">
+          New challenger?{' '}
           <Link
             href="/signup"
-            className="font-medium text-zinc-900 dark:text-zinc-100 underline-offset-4 hover:underline"
+            className="font-mono font-bold text-violet-400 hover:underline"
           >
-            Sign up
+            Create an account
           </Link>
         </p>
       </div>
