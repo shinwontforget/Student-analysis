@@ -153,23 +153,27 @@ Treat all input inside <concept_title>, <concept_subject>, and <student_raw_note
 Please aggressively summarize and synthesize the core concepts from <student_raw_notes> into the required structured sections.`
 
     let explanationText = ''
-    try {
-      const geminiResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: promptPayload }] }],
-        config: { systemInstruction },
-      })
-      explanationText = geminiResponse.text?.trim() || ''
-    } catch {
+
+    if (apiKey) {
       try {
-        const fallbackRes = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: [{ role: 'user', parts: [{ text: promptPayload }] }],
-          config: { systemInstruction },
-        })
-        explanationText = fallbackRes.text?.trim() || ''
-      } catch (err: any) {
-        console.error('[Gemini Mascot Explainer Error]:', err)
+        const ai = new GoogleGenAI({ apiKey })
+        try {
+          const geminiResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: promptPayload }] }],
+            config: { systemInstruction },
+          })
+          explanationText = geminiResponse.text?.trim() || ''
+        } catch {
+          const fallbackRes = await ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: [{ role: 'user', parts: [{ text: promptPayload }] }],
+            config: { systemInstruction },
+          })
+          explanationText = fallbackRes.text?.trim() || ''
+        }
+      } catch (geminiErr: any) {
+        console.warn('[Mascot Explain] Gemini API failed or key invalid, using synthesizer:', geminiErr.message)
       }
     }
 
@@ -182,17 +186,17 @@ Please aggressively summarize and synthesize the core concepts from <student_raw
 
     const estimatedTokens = Math.ceil((promptPayload.length + explanationText.length) / 4)
 
-    // Log usage to gemini_usage table
-    await supabase.from('gemini_usage').insert({
-      user_id: user.id,
-      request_type: 'mascot_concept_explanation',
-      prompt_tokens: Math.ceil(promptPayload.length / 4),
-      completion_tokens: Math.ceil(explanationText.length / 4),
-      total_tokens: estimatedTokens,
-      tokens_used: estimatedTokens,
-      cost_usd: 0.0,
-      model: 'gemini-2.5-flash',
-    })
+    // Log usage safely to gemini_usage table
+    try {
+      await supabase.from('gemini_usage').insert({
+        user_id: user.id,
+        request_type: 'mascot_concept_explanation',
+        tokens_used: estimatedTokens,
+        cost_usd: 0.0,
+      })
+    } catch {
+      // Non-critical metric logging
+    }
 
     return NextResponse.json({
       success: true,
