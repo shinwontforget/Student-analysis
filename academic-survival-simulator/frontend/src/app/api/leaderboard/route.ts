@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GamificationEngine } from '@/lib/services/gamificationEngine'
 
-// Enforce 60-second caching for this Route Handler
-export const revalidate = 60
+// Force dynamic rendering — this route uses cookies() via Supabase server client
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
