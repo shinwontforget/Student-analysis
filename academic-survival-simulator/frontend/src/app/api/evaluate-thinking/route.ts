@@ -8,6 +8,8 @@ const ROLLING_DAILY_GEMINI_CAP = 15 // Under Google AI Studio free tier limits
 
 interface EvaluationResult {
   score: number
+  quality_score?: number
+  uniqueness_score?: number
   feedback: string
   strengths: string[]
   improvements: string[]
