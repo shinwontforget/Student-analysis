@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useTransition } from 'react'
+import React, { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Moon, Coffee, Gamepad2, BookOpen, Zap, ArrowRight, Brain, Loader2 } from 'lucide-react'
@@ -47,6 +47,18 @@ export default function OnboardingPage() {
   const [isPending, startTransition] = useTransition()
 
   const [fullName, setFullName] = useState('')
+
+  useEffect(() => {
+    async function loadUser() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const metadataName = user.user_metadata?.full_name || user.user_metadata?.name || ''
+        const fallbackName = user.email ? user.email.split('@')[0] : ''
+        setFullName(metadataName || fallbackName)
+      }
+    }
+    loadUser()
+  }, [])
   const [targetCgpa, setTargetCgpa] = useState(8.0)
   const [sleep, setSleep]   = useState(7.5)
   const [study, setStudy]   = useState(5.0)
@@ -155,7 +167,7 @@ export default function OnboardingPage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. Soumil Sharma"
+                placeholder="Enter your full name"
                 className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
               />
             </div>
