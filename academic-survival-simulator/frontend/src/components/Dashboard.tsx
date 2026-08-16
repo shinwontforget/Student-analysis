@@ -68,14 +68,14 @@ function RangeSlider({
         <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${color}`}>
           {icon} {label}
         </div>
-        <span className="text-sm font-black text-white font-mono">
-          {value}<span className="text-xs text-zinc-500 ml-1">{unit}</span>
+        <span className="text-sm font-black text-slate-900 font-mono">
+          {value}<span className="text-xs text-slate-500 ml-1">{unit}</span>
         </span>
       </div>
       <input
         type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-violet-500 cursor-pointer"
+        className="w-full accent-indigo-600 cursor-pointer"
       />
     </div>
   )
@@ -118,9 +118,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
   const [obLevel, setObLevel] = useState<StudentLevel>('college')
   const [obField, setObField] = useState<StudentField>('computer_science')
 
-  // Inline CGPA formula — avoids GamificationEngine returning 0 for default sliders
-  // Sleep: 7.5h => sleepE=56, Coffee: 2 => coffeeE=16, Study: 5 => drainE=22.5, Gaming: 2 => gamingE=4
-  // totalEnergy ≈ 56 + 16 - 22.5 + 4 = 53.5 => energy = 54
   const obEnergy = Math.max(0, Math.min(100, Math.round(
     Math.min(70, Math.round((obSleep / 8) * 60) + (obSleep > 8 ? (obSleep - 8) * 5 : 0)) +
     (obCoffee <= 4 ? obCoffee * 8 : 32 - (obCoffee - 4) * 6) -
@@ -184,28 +181,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
         stress: obStress,
       }, { onConflict: 'user_id,logged_date' })
 
-      toast(`🚀 Welcome, ${onboardName || 'Scholar'}! Starting CGPA: ${obStartingCgpa}`, 'success')
       setShowOnboarding(false)
+      toast(`Profile initialized! Starting CGPA: ${obStartingCgpa.toFixed(2)} 🚀`, 'success')
     })
   }
 
-  // ── Sliders State (for daily habit tracking on dashboard) ─────────────────
-  const [sleep, setSleep]   = useState<number>(7.5)
-  const [study, setStudy]   = useState<number>(6.0)
-  const [coffee, setCoffee] = useState<number>(3)
-  const [gaming, setGaming] = useState<number>(2.0)
-
-  // Live Student CGPA
-  const [liveCgpa, setLiveCgpa] = useState<number>(user.cgpa ?? 3.0)
-
-  // Real-Time Calendar Progression (7 real world days per semester week)
+  // ── Simulation Engine State ───────────────────────────────────────────────
   const [currentWeek, setCurrentWeek] = useState<number>(1)
   const [dayInWeek, setDayInWeek] = useState<number>(1)
-  const [semesterLog, setSemesterLog] = useState<SemesterEvent[]>([SEMESTER_EVENTS[1]])
-  const [simulationGpa, setSimulationGpa] = useState<number>(user.cgpa ?? 3.0)
   const [sanityLevel, setSanityLevel] = useState<number>(85)
+  const [simulationGpa, setSimulationGpa] = useState<number>(user.cgpa ?? 3.00)
+  const [liveCgpa, setLiveCgpa] = useState<number>(user.cgpa ?? 3.00)
+  const [semesterLog, setSemesterLog] = useState<SemesterEvent[]>([])
 
-  // Real 7-day Summary Stats for Modal
+  // ── Habit Sliders State ───────────────────────────────────────────────────
+  const [sleep, setSleep]   = useState<number>(7.5)
+  const [study, setStudy]   = useState<number>(5.0)
+  const [coffee, setCoffee] = useState<number>(2)
+  const [gaming, setGaming] = useState<number>(2.0)
+
+  const { energy, stress } = GamificationEngine.calculateEnergyStress({ sleep, study, coffee, gaming })
+
+  // ── Real 7-Day Performance Stats ──────────────────────────────────────────
   const [weeklyStats, setWeeklyStats] = useState<{
     quizzesCompleted: number
     avgScorePct: number
@@ -214,44 +211,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
     weeklyTip: string
   } | null>(null)
 
-  // Energy & Stress
-  const { energy, stress } = GamificationEngine.calculateEnergyStress({ sleep, study, coffee, gaming })
-
-  // Fetch real 7-day report from Supabase
   const loadWeeklyReport = async () => {
     try {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-      // 1. Quizzes completed in last 7 days
-      const { data: qAttempts } = await supabase
+      const { data: attempts } = await supabase
         .from('quiz_attempts')
-        .select('score_pct, cgpa_delta')
+        .select('score_pct, cgpa_delta, attempted_at')
         .eq('user_id', user.id)
         .gte('attempted_at', sevenDaysAgo)
 
-      const quizzesCompleted = qAttempts?.length || 0
-      const avgScorePct = quizzesCompleted > 0
-        ? Math.round(qAttempts!.reduce((sum, q) => sum + (Number(q.score_pct) || 0), 0) / quizzesCompleted)
-        : 0
-      const quizDeltaSum = qAttempts
-        ? qAttempts.reduce((sum, q) => sum + (Number(q.cgpa_delta) || 0), 0)
-        : 0
-
-      // 2. Critical Thinking written exams in last 7 days
-      const { data: ctSubs } = await supabase
+      const { data: essays } = await supabase
         .from('critical_thinking_submissions')
-        .select('quality_score, uniqueness_score')
+        .select('score, created_at')
         .eq('user_id', user.id)
         .gte('created_at', sevenDaysAgo)
 
-      const examsSubmitted = ctSubs?.length || 0
-      const ctDeltaSum = ctSubs
-        ? ctSubs.reduce((sum, ct) => sum + (((ct.quality_score || 0) + (ct.uniqueness_score || 0)) / 200) * 0.05, 0)
+      const quizzesCompleted = attempts?.length ?? 0
+      const totalScoreSum = attempts?.reduce((acc: number, a: any) => acc + (a.score_pct ?? 0), 0) ?? 0
+      const avgScorePct = quizzesCompleted > 0 ? Math.round(totalScoreSum / quizzesCompleted) : 0
+      const quizDeltaSum = attempts?.reduce((acc: number, a: any) => acc + (a.cgpa_delta ?? 0), 0) ?? 0
+
+      const examsSubmitted = essays?.length ?? 0
+      const ctDeltaSum = examsSubmitted > 0
+        ? essays!.reduce((acc: number, e: any) => {
+            const rawScore = Number(e.score) || 0
+            return acc + (rawScore >= 8.0 ? 0.08 : rawScore >= 6.0 ? 0.04 : -0.03)
+          }, 0)
         : 0
 
       const total7DayDelta = parseFloat((quizDeltaSum + ctDeltaSum).toFixed(2))
 
-      // Contextual AI advisor tip
       let tip = 'No activity recorded yet in the last 7 days. Complete daily quizzes from your Revision Shelf to build CGPA momentum!'
       if (quizzesCompleted >= 5 && avgScorePct >= 80) {
         tip = 'Fantastic academic consistency! Your high quiz accuracy is creating solid daily CGPA gains.'
@@ -280,7 +270,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
     async function loadUserDataAndRollup() {
       const todayStr = new Date().toISOString().split('T')[0]
 
-      // 1. Fetch user record for start date and CGPA
       const { data: profile } = await supabase
         .from('users')
         .select('cgpa, created_at, semester_start_date')
@@ -293,7 +282,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
           setSimulationGpa(Number(profile.cgpa))
         }
 
-        // Calculate real elapsed weeks (7 real calendar days per week)
         const startDate = profile.semester_start_date || profile.created_at || new Date().toISOString()
         const diffMs = Math.max(0, Date.now() - new Date(startDate).getTime())
         const daysElapsed = Math.floor(diffMs / (1000 * 60 * 60 * 24))
@@ -303,7 +291,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
         setCurrentWeek(realWeekNum)
         setDayInWeek(currentDayOf7)
         
-        // Populate event log with all weeks unlocked so far (in reverse chronological order)
         const logs: SemesterEvent[] = []
         for (let w = 1; w <= realWeekNum; w++) {
           if (SEMESTER_EVENTS[w]) {
@@ -321,7 +308,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
         setSemesterLog(logs.reverse())
       }
 
-      // 2. Load today's habit log
       const { data: habitData } = await supabase
         .from('daily_habit_logs')
         .select('*')
@@ -336,7 +322,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
         if (habitData.gaming_hrs) setGaming(Number(habitData.gaming_hrs))
       }
 
-      // 3. Trigger daily rollup for yesterday's activities
       try {
         const rollupRes = await fetch('/api/daily-rollup', { method: 'POST' })
         const rollupData = await rollupRes.json()
@@ -349,14 +334,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
         // Rollup error handled silently
       }
 
-      // 4. Load real 7-day stats
       loadWeeklyReport()
     }
 
     loadUserDataAndRollup()
   }, [user.id])
 
-  // Save habit slider changes to Supabase
   const handleHabitChange = async (type: 'sleep' | 'study' | 'coffee' | 'gaming', val: number) => {
     if (type === 'sleep') setSleep(val)
     if (type === 'study') setStudy(val)
@@ -385,7 +368,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
     }, { onConflict: 'user_id,logged_date' })
   }
 
-  // Calculate dynamic projected GPA based on habit sliders
   const projectedGpa = Math.min(
     10.0,
     Math.max(
@@ -403,7 +385,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
   )
 
   return (
-    <div className="min-h-screen bg-[#070712] text-zinc-100 p-4 sm:p-8 space-y-12 font-mono select-none">
+    <div className="min-h-screen bg-slate-50 text-slate-900 p-4 sm:p-8 space-y-12 font-mono select-none">
 
       {/* ====================================================================== */}
       {/* FIRST-TIME ONBOARDING MODAL OVERLAY                                    */}
@@ -414,41 +396,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#070712]/95 backdrop-blur-xl overflow-y-auto"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto"
           >
-            <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-gradient-to-tr from-violet-600/20 via-purple-600/15 to-pink-500/10 blur-[140px]" />
-
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ delay: 0.1, duration: 0.4 }}
-              className="relative w-full max-w-2xl my-8"
+              className="relative w-full max-w-2xl my-8 text-slate-900"
             >
               {/* Logo + Title */}
               <div className="text-center mb-5 space-y-1">
                 <div className="flex justify-center mb-2"><Logo size={40} /></div>
-                <h2 className="text-2xl font-black tracking-widest uppercase text-white">
+                <h2 className="text-2xl font-black tracking-widest uppercase text-slate-900">
                   {obStep === 0 ? 'CHOOSE YOUR SCHOLAR' : obStep === 1 ? 'SELECT YOUR FIELD' : 'SET YOUR HABITS'}
                 </h2>
-                <p className="text-xs text-zinc-500 font-sans">
+                <p className="text-xs text-slate-500 font-sans">
                   Step {obStep + 1} of 3
                 </p>
                 {/* Step progress */}
                 <div className="flex gap-2 justify-center pt-1">
                   {[0, 1, 2].map((s) => (
-                    <div key={s} className={`h-1.5 rounded-full transition-all duration-300 ${s <= obStep ? 'bg-violet-500 w-12' : 'bg-white/10 w-8'}`} />
+                    <div key={s} className={`h-1.5 rounded-full transition-all duration-300 ${s <= obStep ? 'bg-indigo-600 w-12' : 'bg-slate-200 w-8'}`} />
                   ))}
                 </div>
               </div>
 
               {/* STEP 0 — AVATAR PICKER */}
               {obStep === 0 && (
-                <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-5">
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-5 shadow-xl">
                   <AvatarPicker selected={obAvatar} onSelect={setObAvatar} />
                   <button
                     type="button"
                     onClick={() => setObStep(1)}
-                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-violet-600 py-4 text-xs font-black uppercase tracking-widest text-white hover:bg-violet-500 transition-all shadow-[0_0_24px_rgba(139,92,246,0.35)]"
+                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-4 text-xs font-black uppercase tracking-widest text-white hover:bg-indigo-700 transition-all shadow-sm"
                   >
                     NEXT — SELECT YOUR FIELD <ArrowRight className="h-4 w-4" />
                   </button>
@@ -459,8 +439,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
               {obStep === 1 && (
                 <div className="space-y-4">
                   {/* Level selector */}
-                  <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-3">
-                    <div className="text-[10px] font-extrabold tracking-widest text-violet-400 uppercase">Your Education Level</div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-3 shadow-xl">
+                    <div className="text-[10px] font-extrabold tracking-widest text-indigo-600 uppercase">Your Education Level</div>
                     <div className="grid grid-cols-2 gap-3">
                       {(Object.entries(LEVEL_LABELS) as [StudentLevel, string][]).map(([lvl, label]) => (
                         <button
@@ -473,8 +453,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
                           }}
                           className={`rounded-2xl border p-3 text-left transition-all ${
                             obLevel === lvl
-                              ? 'border-violet-500 bg-violet-950/50 text-white'
-                              : 'border-white/10 bg-white/5 text-zinc-400 hover:border-violet-400/40'
+                              ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold'
+                              : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300'
                           }`}
                         >
                           <div className="text-sm font-black">{label}</div>
@@ -484,8 +464,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
                   </div>
 
                   {/* Field selector */}
-                  <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-3">
-                    <div className="text-[10px] font-extrabold tracking-widest text-emerald-400 uppercase">Your Subject Area</div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-3 shadow-xl">
+                    <div className="text-[10px] font-extrabold tracking-widest text-emerald-700 uppercase">Your Subject Area</div>
                     <div className="grid grid-cols-2 gap-2">
                       {FIELDS_BY_LEVEL[obLevel].map((f) => (
                         <button
@@ -494,8 +474,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
                           onClick={() => setObField(f)}
                           className={`rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all ${
                             obField === f
-                              ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200'
-                              : 'border-white/10 bg-white/5 text-zinc-400 hover:border-emerald-400/40'
+                              ? 'border-emerald-600 bg-emerald-50 text-emerald-900'
+                              : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300'
                           }`}
                         >
                           {FIELD_LABELS[f]}
@@ -505,8 +485,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
                   </div>
 
                   <div className="flex gap-3">
-                    <button type="button" onClick={() => setObStep(0)} className="flex-1 rounded-2xl border border-white/10 py-3 text-xs font-bold uppercase text-zinc-400 hover:border-white/20 transition-all">← BACK</button>
-                    <button type="button" onClick={() => setObStep(2)} className="flex-[2] flex items-center justify-center gap-2 rounded-2xl bg-violet-600 py-3 text-xs font-black uppercase text-white hover:bg-violet-500 transition-all">
+                    <button type="button" onClick={() => setObStep(0)} className="flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-xs font-bold uppercase text-slate-600 hover:bg-slate-50 transition-all">← BACK</button>
+                    <button type="button" onClick={() => setObStep(2)} className="flex-[2] flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3 text-xs font-black uppercase text-white hover:bg-indigo-700 transition-all">
                       NEXT — SET HABITS <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>
@@ -517,8 +497,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
               {obStep === 2 && (
                 <form onSubmit={handleOnboardingSubmit} className="space-y-4">
                   {/* Identity */}
-                  <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-4">
-                    <div className="text-[10px] font-extrabold tracking-widest text-violet-400 uppercase">Your Identity</div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-4 shadow-xl">
+                    <div className="text-[10px] font-extrabold tracking-widest text-indigo-600 uppercase">Your Identity</div>
 
                     <div className="flex items-center gap-4">
                       <AvatarSVG avatarId={obAvatar} size={56} />
@@ -528,59 +508,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
                           value={onboardName}
                           onChange={(e) => setOnboardName(e.target.value)}
                           placeholder="Your full name..."
-                          className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
                         />
-                        <div className="text-[10px] text-zinc-500 mt-1 font-sans">{LEVEL_LABELS[obLevel]} · {FIELD_LABELS[obField]}</div>
+                        <div className="text-[10px] text-slate-500 mt-1 font-sans">{LEVEL_LABELS[obLevel]} · {FIELD_LABELS[obField]}</div>
                       </div>
                     </div>
 
                     {/* Live CGPA Preview */}
-                    <div className="flex items-center justify-between rounded-xl border border-violet-500/30 bg-violet-950/30 px-4 py-3">
+                    <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3">
                       <div>
-                        <div className="text-[10px] font-extrabold uppercase tracking-widest text-violet-400">Starting CGPA</div>
-                        <div className="text-[11px] text-zinc-400 font-sans mt-0.5">Grows only through quizzes & written exams</div>
+                        <div className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-700">Starting CGPA</div>
+                        <div className="text-[11px] text-slate-600 font-sans mt-0.5">Grows only through quizzes & written exams</div>
                       </div>
-                      <div className="text-3xl font-black text-violet-300">{obStartingCgpa.toFixed(2)}</div>
+                      <div className="text-3xl font-black text-indigo-700">{obStartingCgpa.toFixed(2)}</div>
                     </div>
                   </div>
 
                   {/* Presets */}
-                  <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-3">
-                    <div className="text-[10px] font-extrabold tracking-widest text-emerald-400 uppercase">Quick Presets</div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-3 shadow-xl">
+                    <div className="text-[10px] font-extrabold tracking-widest text-emerald-700 uppercase">Quick Presets</div>
                     <div className="grid grid-cols-2 gap-3">
                       {SUGGESTED_SCHEDULES.map((p) => (
                         <button key={p.label} type="button"
                           onClick={() => { setObSleep(p.sleep); setObStudy(p.study); setObCoffee(p.coffee); setObGaming(p.gaming) }}
-                          className="rounded-2xl border border-white/10 bg-white/5 p-3 text-left hover:border-violet-500/50 hover:bg-violet-950/20 transition-all group"
+                          className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group"
                         >
-                          <div className="text-xs font-black text-white group-hover:text-violet-300">{p.label}</div>
-                          <div className="text-[10px] text-zinc-500 mt-0.5">{p.desc}</div>
+                          <div className="text-xs font-black text-slate-900 group-hover:text-indigo-600">{p.label}</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">{p.desc}</div>
                         </button>
                       ))}
                     </div>
                   </div>
 
                   {/* Habit Sliders */}
-                  <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-5">
-                    <div className="text-[10px] font-extrabold tracking-widest text-amber-400 uppercase">Daily Habits</div>
-                    <RangeSlider icon={<Moon className="h-4 w-4" />}     label="Sleep"  unit="hrs"  min={3}   max={12} step={0.5} value={obSleep}  onChange={setObSleep}  color="text-cyan-400" />
-                    <RangeSlider icon={<BookOpen className="h-4 w-4" />} label="Study"  unit="hrs"  min={0}   max={12} step={0.5} value={obStudy}  onChange={setObStudy}  color="text-violet-400" />
-                    <RangeSlider icon={<Coffee className="h-4 w-4" />}   label="Coffee" unit="cups" min={0}   max={8}  step={1}   value={obCoffee} onChange={setObCoffee} color="text-amber-400" />
-                    <RangeSlider icon={<Gamepad2 className="h-4 w-4" />} label="Gaming" unit="hrs"  min={0}   max={8}  step={0.5} value={obGaming} onChange={setObGaming} color="text-pink-400" />
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-5 shadow-xl">
+                    <div className="text-[10px] font-extrabold tracking-widest text-amber-700 uppercase">Daily Habits</div>
+                    <RangeSlider icon={<Moon className="h-4 w-4" />}     label="Sleep"  unit="hrs"  min={3}   max={12} step={0.5} value={obSleep}  onChange={setObSleep}  color="text-sky-600" />
+                    <RangeSlider icon={<BookOpen className="h-4 w-4" />} label="Study"  unit="hrs"  min={0}   max={12} step={0.5} value={obStudy}  onChange={setObStudy}  color="text-indigo-600" />
+                    <RangeSlider icon={<Coffee className="h-4 w-4" />}   label="Coffee" unit="cups" min={0}   max={8}  step={1}   value={obCoffee} onChange={setObCoffee} color="text-amber-600" />
+                    <RangeSlider icon={<Gamepad2 className="h-4 w-4" />} label="Gaming" unit="hrs"  min={0}   max={8}  step={0.5} value={obGaming} onChange={setObGaming} color="text-rose-600" />
 
                     <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-center">
-                        <div className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest">Energy</div>
-                        <div className="text-2xl font-black text-emerald-300 mt-1">{obEnergy}%</div>
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-center">
+                        <div className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-widest">Energy</div>
+                        <div className="text-2xl font-black text-emerald-700 mt-1">{obEnergy}%</div>
                       </div>
-                      <div className="rounded-2xl border border-rose-500/30 bg-rose-950/20 p-3 text-center">
-                        <div className="text-[10px] font-extrabold text-rose-400 uppercase tracking-widest">Stress</div>
-                        <div className="text-2xl font-black text-rose-300 mt-1">{obStress}%</div>
+                      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-center">
+                        <div className="text-[10px] font-extrabold text-rose-700 uppercase tracking-widest">Stress</div>
+                        <div className="text-2xl font-black text-rose-700 mt-1">{obStress}%</div>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-violet-500/20 bg-violet-950/10 p-3 text-xs font-sans text-zinc-300 leading-relaxed">
-                      💡 <strong className="text-violet-300">AI Tip:</strong>{' '}
+                    <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-3 text-xs font-sans text-slate-700 leading-relaxed">
+                      💡 <strong className="text-indigo-800">AI Tip:</strong>{' '}
                       {obEnergy >= 70 && obStress <= 50
                         ? 'Great balance! High energy & low stress = fast CGPA growth.'
                         : obEnergy < 50
@@ -590,11 +570,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
                   </div>
 
                   <div className="flex gap-3">
-                    <button type="button" onClick={() => setObStep(1)} className="rounded-2xl border border-white/10 px-5 py-4 text-xs font-bold uppercase text-zinc-400 hover:border-white/20 transition-all">← BACK</button>
+                    <button type="button" onClick={() => setObStep(1)} className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-xs font-bold uppercase text-slate-600 hover:bg-slate-50 transition-all">← BACK</button>
                     <button
                       type="submit"
                       disabled={isPending}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-violet-600 py-4 text-xs font-black uppercase tracking-widest text-white shadow-[0_0_30px_rgba(139,92,246,0.4)] hover:bg-violet-500 active:scale-[0.99] disabled:opacity-60 transition-all"
+                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-4 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-60 transition-all"
                     >
                       {isPending
                         ? <><Loader2 className="h-4 w-4 animate-spin" /> CREATING PROFILE...</>
@@ -608,23 +588,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
         )}
       </AnimatePresence>
 
-
-
-
-
       {/* ====================================================================== */}
       {/* REVISION SHELF EMPTY NUDGE BANNER                                      */}
       {/* ====================================================================== */}
       {!showOnboarding && shelfCount === 0 && (
-        <div className="flex items-start gap-4 rounded-2xl border border-amber-500/30 bg-amber-950/20 px-5 py-4">
-          <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
+          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
           <div className="flex-1">
-            <div className="text-xs font-black uppercase tracking-wider text-amber-300">Your Revision Shelf is empty!</div>
-            <div className="text-[11px] text-zinc-400 font-sans mt-0.5">Add topics to your Revision Shelf so you can take targeted daily quizzes and grow your CGPA. Your CGPA only changes through quizzes &amp; critical thinking.</div>
+            <div className="text-xs font-black uppercase tracking-wider text-amber-800">Your Revision Shelf is empty!</div>
+            <div className="text-[11px] text-slate-600 font-sans mt-0.5">Add topics to your Revision Shelf so you can take targeted daily quizzes and grow your CGPA. Your CGPA only changes through quizzes &amp; critical thinking.</div>
           </div>
           <Link
             href="/revision-shelf"
-            className="flex items-center gap-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-all shrink-0 uppercase tracking-wider"
+            className="flex items-center gap-1.5 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-200 transition-all shrink-0 uppercase tracking-wider"
           >
             <BookPlus className="h-3.5 w-3.5" /> ADD NOTES
           </Link>
@@ -650,23 +626,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
       {/* ==================================================================== */}
       <section className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-6">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-violet-400">
+            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-indigo-600">
               <Zap className="h-3.5 w-3.5 fill-current" /> REAL-TIME SEMESTER TRACKER
-              <span className="text-zinc-500">•</span>
-              <span className="text-emerald-400">{LEVEL_LABELS[obLevel] || 'College'}</span>
-              <span className="text-zinc-500">•</span>
-              <span className="text-cyan-400 font-bold">DAY {dayInWeek} OF 7</span>
+              <span className="text-slate-400">•</span>
+              <span className="text-emerald-700">{LEVEL_LABELS[obLevel] || 'College'}</span>
+              <span className="text-slate-400">•</span>
+              <span className="text-sky-700 font-bold">DAY {dayInWeek} OF 7</span>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black tracking-widest uppercase text-white mt-1">
+            <h1 className="text-2xl sm:text-4xl font-black tracking-widest uppercase text-slate-900 mt-1">
               {obLevel === 'school_9_10'
                 ? `CLASS 9-10 ACADEMIC YEAR — WEEK ${currentWeek} / 14`
                 : obLevel === 'school_11_12'
                 ? `CLASS 11-12 BOARD SIMULATOR — WEEK ${currentWeek} / 14`
                 : `SEMESTER SIMULATION — WEEK ${currentWeek} / 14`}
             </h1>
-            <p className="text-xs text-zinc-400 font-sans tracking-wide max-w-2xl mt-1">
+            <p className="text-xs text-slate-600 font-sans tracking-wide max-w-2xl mt-1">
               Synchronized with real calendar time (7 real-world days per week). CGPA updates at the end of each working day based on your daily quizzes and critical thinking assessments.
             </p>
           </div>
@@ -677,23 +653,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
                 loadWeeklyReport()
                 setShowWeeklyModal(true)
               }}
-              className="flex items-center gap-1.5 rounded-2xl border border-violet-500/30 bg-violet-950/40 px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-violet-300 hover:bg-violet-900/40 transition-all"
+              className="flex items-center gap-1.5 rounded-2xl border border-indigo-200 bg-white px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 shadow-sm transition-all"
             >
-              <Calendar className="h-4 w-4 text-violet-400" /> 7-DAY SUMMARY
+              <Calendar className="h-4 w-4 text-indigo-600" /> 7-DAY SUMMARY
             </button>
 
-            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#0d0c1d] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-zinc-300 shadow-lg">
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-slate-700 shadow-sm">
               {currentWeek >= 14 ? (
                 <>
-                  <Sparkles className="h-4 w-4 text-amber-400" />
-                  <span className="text-amber-300">TERM COMPLETE</span>
+                  <Sparkles className="h-4 w-4 text-amber-600" />
+                  <span className="text-amber-700">TERM COMPLETE</span>
                 </>
               ) : (
                 <>
-                  <Clock className="h-4 w-4 text-violet-400 animate-pulse" />
-                  <span className="text-zinc-400">
+                  <Clock className="h-4 w-4 text-indigo-600 animate-pulse" />
+                  <span className="text-slate-500">
                     WEEK {currentWeek + 1} UNLOCKS IN:{' '}
-                    <strong className="text-white font-mono">
+                    <strong className="text-slate-900 font-mono">
                       {7 - dayInWeek === 0 ? 'TOMORROW' : `${7 - dayInWeek} ${7 - dayInWeek === 1 ? 'DAY' : 'DAYS'}`}
                     </strong>
                   </span>
@@ -706,84 +682,83 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
         {/* 3 Status Cards Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Sanity Levels */}
-          <div className="rounded-2xl border border-white/10 bg-[#0d0c1e] p-5">
-            <div className="flex items-center justify-between mb-3 text-zinc-400">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3 text-slate-600">
               <span className="text-[10px] font-extrabold uppercase tracking-widest">SANITY LEVEL</span>
-              <span className="text-xs font-bold text-emerald-400">{sanityLevel}%</span>
+              <span className="text-xs font-bold text-emerald-700">{sanityLevel}%</span>
             </div>
-            <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
+            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
+                className="h-full bg-emerald-500 transition-all duration-500"
                 style={{ width: `${sanityLevel}%` }}
               />
             </div>
-            <p className="text-[10px] text-zinc-500 font-sans mt-2">
+            <p className="text-[10px] text-slate-500 font-sans mt-2">
               {sanityLevel >= 70 ? 'Mental state is optimal.' : sanityLevel >= 40 ? 'Slight fatigue setting in.' : 'Severe burnout warning!'}
             </p>
           </div>
 
           {/* Current Sim GPA */}
-          <div className="rounded-2xl border border-violet-500/30 bg-violet-950/20 p-5">
-            <div className="flex items-center justify-between mb-1 text-violet-400">
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-1 text-indigo-700">
               <span className="text-[10px] font-extrabold uppercase tracking-widest">SIMULATED CGPA</span>
               <Brain className="h-4 w-4" />
             </div>
-            <div className="text-3xl font-black text-white mt-1">
+            <div className="text-3xl font-black text-slate-900 mt-1">
               {simulationGpa.toFixed(2)}
             </div>
-            <p className="text-[10px] text-zinc-400 font-sans mt-1">
+            <p className="text-[10px] text-slate-600 font-sans mt-1">
               Target: 10.00 • Delta this week: {SEMESTER_EVENTS[currentWeek]?.impact.gpaDelta ?? 0 >= 0 ? '+' : ''}{SEMESTER_EVENTS[currentWeek]?.impact.gpaDelta ?? 0}
             </p>
           </div>
 
           {/* Burnout Risk */}
-          <div className="rounded-2xl border border-white/10 bg-[#0d0c1e] p-5">
-            <div className="flex items-center justify-between mb-3 text-zinc-400">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3 text-slate-600">
               <span className="text-[10px] font-extrabold uppercase tracking-widest">BURNOUT RISK</span>
-              <span className="text-xs font-bold text-rose-400">{100 - sanityLevel}%</span>
+              <span className="text-xs font-bold text-rose-700">{100 - sanityLevel}%</span>
             </div>
-            <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
+            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
               <div
                 className="h-full bg-rose-500 transition-all duration-500"
                 style={{ width: `${100 - sanityLevel}%` }}
               />
             </div>
-            <p className="text-[10px] text-zinc-500 font-sans mt-2">
+            <p className="text-[10px] text-slate-500 font-sans mt-2">
               High coffee & low sleep increase risk exponentially.
             </p>
           </div>
         </div>
 
         {/* 14-Week Simulation Graph Bar */}
-        <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-4 shadow-2xl">
-          <div className="flex items-center justify-between text-xs text-zinc-400 font-bold uppercase">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between text-xs text-slate-600 font-bold uppercase">
             <span>WEEKLY CGPA TRAJECTORY</span>
-            <span className="text-violet-400">W{currentWeek} OF W14</span>
+            <span className="text-indigo-600">W{currentWeek} OF W14</span>
           </div>
 
-          <div className="grid grid-cols-14 gap-1.5 h-32 items-end pt-4 border-b border-white/10 pb-4">
+          <div className="grid grid-cols-14 gap-1.5 h-32 items-end pt-4 border-b border-slate-100 pb-4">
             {Array.from({ length: 14 }).map((_, idx) => {
               const weekNum = idx + 1
-              const isPast = weekNum <= currentWeek
               const isCurrent = weekNum === currentWeek
 
               return (
                 <div key={weekNum} className="flex flex-col items-center gap-2 h-full justify-end">
                   {weekNum > currentWeek ? (
-                    <div className="w-full h-10 rounded-t-lg bg-zinc-900/80 border border-dashed border-white/10 flex items-center justify-center">
-                      <Lock className="h-3 w-3 text-zinc-600" />
+                    <div className="w-full h-10 rounded-t-lg bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center">
+                      <Lock className="h-3 w-3 text-slate-400" />
                     </div>
                   ) : (
                     <div
                       className={`w-full rounded-t-lg transition-all duration-500 ${
                         isCurrent
-                          ? 'bg-violet-500 shadow-[0_0_15px_rgba(139,92,246,0.6)]'
-                          : 'bg-violet-900/60'
+                          ? 'bg-indigo-600 shadow-sm'
+                          : 'bg-indigo-200'
                       }`}
                       style={{ height: `${Math.min(100, ((simulationGpa + (weekNum % 3) * 0.2) / 10) * 100)}%` }}
                     />
                   )}
-                  <span className={`text-[9px] font-bold ${isCurrent ? 'text-violet-300 font-extrabold' : weekNum > currentWeek ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                  <span className={`text-[9px] font-bold ${isCurrent ? 'text-indigo-700 font-extrabold' : weekNum > currentWeek ? 'text-slate-400' : 'text-slate-600'}`}>
                     W{weekNum}
                   </span>
                 </div>
@@ -793,27 +768,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
 
           {/* Academic Event Log */}
           <div className="space-y-2 pt-2">
-            <div className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500">
+            <div className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">
               SEMESTER EVENT LOG
             </div>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {semesterLog.map((ev, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-[#070712] p-3 text-xs"
+                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="rounded-lg bg-violet-950/80 border border-violet-500/30 px-2 py-1 text-[10px] font-black text-violet-300">
+                    <span className="rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-1 text-[10px] font-black text-indigo-700">
                       W{ev.week}
                     </span>
                     <div>
-                      <div className="font-extrabold text-white">{ev.title}</div>
-                      <div className="text-[10px] text-zinc-400 font-sans">{ev.desc}</div>
+                      <div className="font-extrabold text-slate-900">{ev.title}</div>
+                      <div className="text-[10px] text-slate-500 font-sans">{ev.desc}</div>
                     </div>
                   </div>
 
                   <div className="text-right text-[10px] font-mono">
-                    <span className={ev.impact.gpaDelta >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    <span className={ev.impact.gpaDelta >= 0 ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
                       {ev.impact.gpaDelta >= 0 ? '+' : ''}{ev.impact.gpaDelta} GPA
                     </span>
                   </div>
@@ -829,87 +804,87 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
       {/* ==================================================================== */}
       <section className="space-y-6">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">
+          <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-slate-900">
             CHARACTER SHEET — DAILY HABIT SLIDERS
           </h2>
-          <p className="text-xs text-zinc-400 font-sans mt-1">
+          <p className="text-xs text-slate-600 font-sans mt-1">
             Adjust your nightly routines. Changes are saved automatically to your profile.
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Column 1: Sliders (4 cols) */}
-          <div className="lg:col-span-4 rounded-3xl border border-white/10 bg-[#0c0b1d] p-6 space-y-6">
+          <div className="lg:col-span-4 rounded-3xl border border-slate-200 bg-white p-6 space-y-6 shadow-sm">
             {/* Sleep */}
             <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-cyan-400">
+              <div className="flex justify-between text-xs font-bold text-sky-700">
                 <span className="flex items-center gap-2 uppercase"><Moon className="h-4 w-4" /> Sleep</span>
-                <span className="font-black text-white">{sleep} hrs</span>
+                <span className="font-black text-slate-900">{sleep} hrs</span>
               </div>
               <input
                 type="range" min={3} max={12} step={0.5} value={sleep}
                 onChange={(e) => handleHabitChange('sleep', parseFloat(e.target.value))}
-                className="w-full accent-cyan-500 cursor-pointer"
+                className="w-full accent-sky-600 cursor-pointer"
               />
             </div>
 
             {/* Study */}
             <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-violet-400">
+              <div className="flex justify-between text-xs font-bold text-indigo-700">
                 <span className="flex items-center gap-2 uppercase"><BookOpen className="h-4 w-4" /> Study</span>
-                <span className="font-black text-white">{study} hrs</span>
+                <span className="font-black text-slate-900">{study} hrs</span>
               </div>
               <input
                 type="range" min={0} max={12} step={0.5} value={study}
                 onChange={(e) => handleHabitChange('study', parseFloat(e.target.value))}
-                className="w-full accent-violet-500 cursor-pointer"
+                className="w-full accent-indigo-600 cursor-pointer"
               />
             </div>
 
             {/* Coffee */}
             <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-amber-400">
+              <div className="flex justify-between text-xs font-bold text-amber-700">
                 <span className="flex items-center gap-2 uppercase"><Coffee className="h-4 w-4" /> Coffee</span>
-                <span className="font-black text-white">{coffee} cups</span>
+                <span className="font-black text-slate-900">{coffee} cups</span>
               </div>
               <input
                 type="range" min={0} max={8} step={1} value={coffee}
                 onChange={(e) => handleHabitChange('coffee', parseInt(e.target.value))}
-                className="w-full accent-amber-500 cursor-pointer"
+                className="w-full accent-amber-600 cursor-pointer"
               />
             </div>
 
             {/* Gaming */}
             <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-pink-400">
+              <div className="flex justify-between text-xs font-bold text-rose-700">
                 <span className="flex items-center gap-2 uppercase"><Gamepad2 className="h-4 w-4" /> Gaming</span>
-                <span className="font-black text-white">{gaming} hrs</span>
+                <span className="font-black text-slate-900">{gaming} hrs</span>
               </div>
               <input
                 type="range" min={0} max={8} step={0.5} value={gaming}
                 onChange={(e) => handleHabitChange('gaming', parseFloat(e.target.value))}
-                className="w-full accent-pink-500 cursor-pointer"
+                className="w-full accent-rose-600 cursor-pointer"
               />
             </div>
 
             {/* Readouts */}
-            <div className="space-y-3 pt-4 border-t border-white/10">
+            <div className="space-y-3 pt-4 border-t border-slate-100">
               <div>
-                <div className="flex justify-between text-xs font-bold text-emerald-400 mb-1">
+                <div className="flex justify-between text-xs font-bold text-emerald-700 mb-1">
                   <span>⚡ ENERGY</span>
                   <span>{energy}%</span>
                 </div>
-                <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                   <div className="h-full bg-emerald-500 transition-all" style={{ width: `${energy}%` }} />
                 </div>
               </div>
 
               <div>
-                <div className="flex justify-between text-xs font-bold text-rose-400 mb-1">
+                <div className="flex justify-between text-xs font-bold text-rose-700 mb-1">
                   <span>🔥 STRESS</span>
                   <span>{stress}%</span>
                 </div>
-                <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                   <div className="h-full bg-rose-500 transition-all" style={{ width: `${stress}%` }} />
                 </div>
               </div>
@@ -917,35 +892,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
           </div>
 
           {/* Column 2: Radar Chart & Projected GPA (4 cols) */}
-          <div className="lg:col-span-4 rounded-3xl border border-violet-500/40 bg-[#0c0b1d] p-6 flex flex-col justify-between items-center text-center shadow-[0_0_40px_rgba(139,92,246,0.1)]">
+          <div className="lg:col-span-4 rounded-3xl border border-slate-200 bg-white p-6 flex flex-col justify-between items-center text-center shadow-sm">
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block mb-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 block mb-1">
                 CURRENT CLASS
               </span>
-              <h3 className="text-xl font-black uppercase tracking-wider text-violet-300">
-                THE BALANCED WANDERER
+              <h3 className="text-xl font-black uppercase tracking-wider text-indigo-700">
+                THE BALANCED SCHOLAR
               </h3>
             </div>
 
             {/* SVG Radar Chart */}
             <div className="my-4 relative h-40 w-40 flex items-center justify-center">
               <svg className="h-full w-full" viewBox="0 0 100 100">
-                <polygon points="50,10 85,30 85,70 50,90 15,70 15,30" fill="none" stroke="#ffffff15" strokeWidth="1" />
-                <polygon points="50,25 72,37 72,63 50,75 28,63 28,37" fill="none" stroke="#ffffff15" strokeWidth="1" />
+                <polygon points="50,10 85,30 85,70 50,90 15,70 15,30" fill="none" stroke="#00000015" strokeWidth="1" />
+                <polygon points="50,25 72,37 72,63 50,75 28,63 28,37" fill="none" stroke="#00000015" strokeWidth="1" />
                 <polygon
                   points={`50,${20 + (12 - sleep) * 2} ${50 + study * 2.5},${35 - study} ${50 + coffee * 2},${65 + coffee} 50,${80 - gaming * 2} ${35 - stress * 0.2},65 ${25 + energy * 0.2},35`}
-                  fill="rgba(139,92,246,0.3)"
-                  stroke="#a78bfa"
+                  fill="rgba(99,102,241,0.15)"
+                  stroke="#6366f1"
                   strokeWidth="1.5"
                 />
               </svg>
             </div>
 
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 block">
                 PROJECTED GPA
               </span>
-              <span className="text-4xl font-black text-amber-300 tracking-tight">
+              <span className="text-4xl font-black text-amber-600 tracking-tight">
                 {projectedGpa.toFixed(2)}
               </span>
             </div>
@@ -953,36 +928,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, isFirstTime = false 
 
           {/* Column 3: Mascot & Achievements (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
-            <div className="rounded-3xl border border-white/10 bg-[#0c0b1d] p-5 flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/40 bg-violet-600/20 text-3xl shrink-0 shadow-lg">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 flex items-center gap-4 shadow-sm">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50 text-3xl shrink-0 shadow-sm">
                 🦉
               </div>
-              <p className="text-xs text-zinc-300 font-sans italic leading-relaxed">
+              <p className="text-xs text-slate-700 font-sans italic leading-relaxed">
                 &quot;Steady progress. Adjust your schedule tonight for optimum energy.&quot;
               </p>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-[#0c0b1d] p-5 space-y-3">
-              <div className="text-xs font-extrabold uppercase tracking-widest text-zinc-400 pb-2 border-b border-white/10">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+              <div className="text-xs font-extrabold uppercase tracking-widest text-slate-600 pb-2 border-b border-slate-100">
                 ACHIEVEMENTS
               </div>
 
               <div className="space-y-2">
-                <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-xs">
-                  <div className="font-bold text-white uppercase text-[11px] mb-0.5">WELL RESTED</div>
-                  <p className="text-[10px] text-zinc-500 font-sans">Log 8 or more hours of sleep.</p>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                  <div className="font-bold text-slate-900 uppercase text-[11px] mb-0.5">WELL RESTED</div>
+                  <p className="text-[10px] text-slate-500 font-sans">Log 8 or more hours of sleep.</p>
                 </div>
 
-                <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-xs">
-                  <div className="font-bold text-white uppercase text-[11px] mb-0.5">DEEP WORK</div>
-                  <p className="text-[10px] text-zinc-500 font-sans">Grind 8+ hours of focused study.</p>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                  <div className="font-bold text-slate-900 uppercase text-[11px] mb-0.5">DEEP WORK</div>
+                  <p className="text-[10px] text-slate-500 font-sans">Grind 8+ hours of focused study.</p>
                 </div>
 
-                <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-xs shadow-[0_0_15px_rgba(245,158,11,0.15)]">
-                  <div className="font-bold text-amber-300 uppercase text-[11px] mb-0.5 flex items-center gap-1">
-                    <Trophy className="h-3.5 w-3.5" /> BALANCED BUILD
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs shadow-sm">
+                  <div className="font-bold text-amber-800 uppercase text-[11px] mb-0.5 flex items-center gap-1">
+                    <Trophy className="h-3.5 w-3.5 text-amber-600" /> BALANCED BUILD
                   </div>
-                  <p className="text-[10px] text-amber-200/80 font-sans">Keep energy above 70 while studying.</p>
+                  <p className="text-[10px] text-amber-700 font-sans">Keep energy above 70 while studying.</p>
                 </div>
               </div>
             </div>

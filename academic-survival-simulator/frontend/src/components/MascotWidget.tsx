@@ -48,49 +48,49 @@ export const MascotWidget: React.FC<MascotWidgetProps> = ({
         return {
           title: 'Exam Panic Surge!',
           badge: 'High Stress',
-          badgeBg: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+          badgeBg: 'bg-rose-50 text-rose-700 border-rose-200',
           avatar: '💥🤯⚡',
           dialogue: `Woah ${studentName}! Stress is at ${stress}%! Take a 5-min walk, grab water, and hit RevisionShelf!`,
-          borderColor: 'border-rose-500/50',
-          bgGradient: 'from-rose-950/40 via-red-900/20 to-zinc-900',
-          glow: 'shadow-[0_0_30px_rgba(244,63,94,0.25)]',
-          icon: <AlertTriangle className="h-4 w-4 text-rose-400 animate-pulse" />,
+          borderColor: 'border-rose-300',
+          bgGradient: 'from-white via-rose-50/40 to-slate-50',
+          glow: 'shadow-sm',
+          icon: <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" />,
         }
       case 'exhausted':
         return {
           title: 'Low Battery Alert',
           badge: 'Low Energy',
-          badgeBg: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+          badgeBg: 'bg-amber-50 text-amber-700 border-amber-200',
           avatar: '😴💤🔋',
           dialogue: `Energy is down to ${energy}%... I'm powering down. Sleep slider up, study slider down!`,
-          borderColor: 'border-amber-500/50',
-          bgGradient: 'from-amber-950/40 via-yellow-900/20 to-zinc-900',
-          glow: 'shadow-[0_0_30px_rgba(245,158,11,0.25)]',
-          icon: <Moon className="h-4 w-4 text-amber-400 animate-bounce" />,
+          borderColor: 'border-amber-300',
+          bgGradient: 'from-white via-amber-50/40 to-slate-50',
+          glow: 'shadow-sm',
+          icon: <Moon className="h-4 w-4 text-amber-600 animate-bounce" />,
         }
       case 'overdrive':
         return {
           title: 'Academic Overdrive!',
           badge: 'Peak Performance',
-          badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+          badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
           avatar: '🚀⚡👑',
           dialogue: `YES! ${energy}% Energy & low stress! You're in absolute flow state right now!`,
-          borderColor: 'border-emerald-500/50',
-          bgGradient: 'from-emerald-950/40 via-teal-900/20 to-zinc-900',
-          glow: 'shadow-[0_0_35px_rgba(16,185,129,0.3)]',
-          icon: <Zap className="h-4 w-4 text-emerald-400" />,
+          borderColor: 'border-emerald-300',
+          bgGradient: 'from-white via-emerald-50/40 to-slate-50',
+          glow: 'shadow-sm',
+          icon: <Zap className="h-4 w-4 text-emerald-600" />,
         }
       default:
         return {
           title: 'Byte - AI Companion',
           badge: 'Balanced',
-          badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+          badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
           avatar: '🤖📚✨',
           dialogue: `Hey ${studentName}! I'm tracking your stamina & performance. Adjust sliders or ask me anything!`,
-          borderColor: 'border-indigo-500/40',
-          bgGradient: 'from-indigo-950/40 via-purple-900/20 to-zinc-900',
-          glow: 'shadow-[0_0_30px_rgba(99,102,241,0.2)]',
-          icon: <Sparkles className="h-4 w-4 text-indigo-400" />,
+          borderColor: 'border-slate-200',
+          bgGradient: 'from-white via-indigo-50/30 to-slate-50',
+          glow: 'shadow-sm',
+          icon: <Sparkles className="h-4 w-4 text-indigo-600" />,
         }
     }
   }
@@ -101,7 +101,7 @@ export const MascotWidget: React.FC<MascotWidgetProps> = ({
     <motion.div
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative overflow-hidden rounded-2xl border ${details.borderColor} bg-gradient-to-br ${details.bgGradient} p-6 backdrop-blur-xl ${details.glow} transition-all duration-500`}
+      className={`relative overflow-hidden rounded-2xl border ${details.borderColor} bg-gradient-to-br ${details.bgGradient} p-6 backdrop-blur-xl ${details.glow} transition-all duration-500 text-slate-900`}
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         {/* Mascot Avatar & Status */}
@@ -110,13 +110,13 @@ export const MascotWidget: React.FC<MascotWidgetProps> = ({
             whileHover={{ scale: 1.1, rotate: [0, -5, 5, 0] }}
             whileTap={{ scale: 0.95 }}
             onClick={handleMascotClick}
-            className="cursor-pointer relative flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-950/60 border border-white/10 text-4xl shadow-inner select-none"
+            className="cursor-pointer relative flex h-20 w-20 items-center justify-center rounded-2xl bg-white border border-slate-200 text-4xl shadow-sm select-none"
           >
             {details.avatar}
             <motion.span
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ repeat: Infinity, duration: 2 }}
-              className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500 text-[10px] text-white"
+              className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white shadow-sm"
             >
               💬
             </motion.span>
@@ -124,7 +124,7 @@ export const MascotWidget: React.FC<MascotWidgetProps> = ({
 
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-lg text-white">{details.title}</h3>
+              <h3 className="font-bold text-lg text-slate-900">{details.title}</h3>
               <span
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${details.badgeBg}`}
               >
@@ -132,36 +132,36 @@ export const MascotWidget: React.FC<MascotWidgetProps> = ({
                 {details.badge}
               </span>
             </div>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-slate-500">
               Click Byte for quick survival tips & advice!
             </p>
           </div>
         </div>
 
         {/* Energy & Stress Gauge Stats */}
-        <div className="flex gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-white/10 pt-3 sm:pt-0">
+        <div className="flex gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-slate-200 pt-3 sm:pt-0">
           <div className="flex flex-col items-center">
-            <span className="text-xs font-medium text-zinc-400 flex items-center gap-1">
-              <Zap className="h-3 w-3 text-emerald-400" /> Energy
+            <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+              <Zap className="h-3 w-3 text-emerald-600" /> Energy
             </span>
-            <span className="text-xl font-bold text-emerald-300">{energy}%</span>
+            <span className="text-xl font-bold text-emerald-700">{energy}%</span>
           </div>
 
-          <div className="h-8 w-px bg-white/10" />
+          <div className="h-8 w-px bg-slate-200" />
 
           <div className="flex flex-col items-center">
-            <span className="text-xs font-medium text-zinc-400 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3 text-rose-400" /> Stress
+            <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3 text-rose-600" /> Stress
             </span>
-            <span className="text-xl font-bold text-rose-300">{stress}%</span>
+            <span className="text-xl font-bold text-rose-700">{stress}%</span>
           </div>
         </div>
       </div>
 
       {/* Mascot Speech Bubble */}
-      <div className="mt-4 relative rounded-xl border border-white/10 bg-zinc-950/70 p-4 text-sm text-zinc-200 shadow-inner">
+      <div className="mt-4 relative rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm">
         <div className="flex items-start gap-2">
-          <MessageCircleHeart className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+          <MessageCircleHeart className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
           <AnimatePresence mode="wait">
             <motion.p
               key={isSpeaking ? `tip-${tipIndex}` : mood}

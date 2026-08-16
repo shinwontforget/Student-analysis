@@ -46,7 +46,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <Dashboard user={userData} isFirstTime={isFirstTime} />
     </main>
   )

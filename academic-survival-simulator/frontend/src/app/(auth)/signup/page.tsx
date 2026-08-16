@@ -48,7 +48,6 @@ export default function SignUpPage() {
         return
       }
 
-      // Supabase returns empty identities array if user already exists (when confirmation is on)
       if (data.user && data.user.identities && data.user.identities.length === 0) {
         setError('An account with this email already exists. Please log in instead!')
         return
@@ -66,31 +65,31 @@ export default function SignUpPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#070712] text-zinc-100 p-4 font-mono select-none">
-      {/* Top Terminal Icon Glow Box */}
-      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/40 bg-violet-600/10 text-violet-400 shadow-[0_0_30px_rgba(139,92,246,0.25)]">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 text-slate-900 p-4 font-mono select-none">
+      {/* Top Terminal Icon Box */}
+      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50 text-indigo-600 shadow-sm">
         <Terminal className="h-7 w-7" />
       </div>
 
       {/* Main Title Header */}
-      <h1 className="text-2xl sm:text-3xl font-black tracking-widest uppercase text-white mb-1 text-center">
+      <h1 className="text-2xl sm:text-3xl font-black tracking-widest uppercase text-slate-900 mb-1 text-center">
         ACADEMIC_SURVIVAL.EXE
       </h1>
-      <p className="text-[11px] text-zinc-400 tracking-widest uppercase mb-8 text-center max-w-sm">
+      <p className="text-[11px] text-slate-500 tracking-widest uppercase mb-8 text-center max-w-sm">
         CREATE YOUR SCHOLAR AVATAR & START YOUR RUN.
       </p>
 
       {/* Main Card Container */}
-      <div className="w-full max-w-md rounded-3xl border border-violet-500/30 bg-[#0d0c1d]/90 p-8 shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-2xl">
+      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         {/* Tab Toggle: LOG IN | START YOUR JOURNEY */}
-        <div className="mb-6 grid grid-cols-2 rounded-xl bg-[#070712] p-1 border border-white/10 text-[10px] font-bold uppercase tracking-wider">
+        <div className="mb-6 grid grid-cols-2 rounded-xl bg-slate-100 p-1 border border-slate-200 text-[10px] font-bold uppercase tracking-wider">
           <Link
             href="/login"
-            className="rounded-lg py-2.5 text-center text-zinc-500 hover:text-zinc-300 transition-colors flex items-center justify-center"
+            className="rounded-lg py-2.5 text-center text-slate-500 hover:text-slate-900 transition-colors flex items-center justify-center"
           >
             LOG IN
           </Link>
-          <button className="rounded-lg bg-violet-600 py-2.5 text-white shadow-md border border-violet-400/30 font-black flex items-center justify-center gap-1">
+          <button className="rounded-lg bg-indigo-600 py-2.5 text-white shadow-sm font-black flex items-center justify-center gap-1">
             <Zap className="h-3 w-3 fill-current" /> START YOUR JOURNEY
           </button>
         </div>
@@ -99,7 +98,7 @@ export default function SignUpPage() {
           <div className="space-y-1.5">
             <label
               htmlFor="full-name"
-              className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400"
+              className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-600"
             >
               FULL NAME
             </label>
@@ -110,7 +109,7 @@ export default function SignUpPage() {
               required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 font-mono"
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 font-mono"
               placeholder="Jane Smith"
             />
           </div>
@@ -118,7 +117,7 @@ export default function SignUpPage() {
           <div className="space-y-1.5">
             <label
               htmlFor="email"
-              className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400"
+              className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-600"
             >
               EMAIL
             </label>
@@ -129,14 +128,14 @@ export default function SignUpPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 font-mono"
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 font-mono"
               placeholder="you@example.com"
             />
           </div>
 
           {/* Education Level */}
           <div className="space-y-1.5">
-            <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400">
+            <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-600">
               EDUCATION LEVEL
             </label>
             <select
@@ -146,7 +145,7 @@ export default function SignUpPage() {
                 setStudentLevel(lvl)
                 setStudentField(FIELDS_BY_LEVEL[lvl][0])
               }}
-              className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-xs text-white focus:outline-none focus:border-violet-500 font-mono"
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono"
             >
               {(Object.entries(LEVEL_LABELS) as [StudentLevel, string][]).map(([lvl, label]) => (
                 <option key={lvl} value={lvl}>{label}</option>
@@ -156,13 +155,13 @@ export default function SignUpPage() {
 
           {/* Subject Field */}
           <div className="space-y-1.5">
-            <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400">
+            <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-600">
               SUBJECT FIELD
             </label>
             <select
               value={studentField}
               onChange={(e) => setStudentField(e.target.value as StudentField)}
-              className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-xs text-white focus:outline-none focus:border-violet-500 font-mono"
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono"
             >
               {FIELDS_BY_LEVEL[studentLevel].map((f) => (
                 <option key={f} value={f}>{FIELD_LABELS[f]}</option>
@@ -173,7 +172,7 @@ export default function SignUpPage() {
           <div className="space-y-1.5">
             <label
               htmlFor="password"
-              className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400"
+              className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-600"
             >
               PASSWORD
             </label>
@@ -185,19 +184,19 @@ export default function SignUpPage() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 font-mono"
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 font-mono"
               placeholder="Min. 8 characters"
             />
           </div>
 
           {error && (
-            <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 text-xs text-rose-300">
+            <div className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700">
               ⚠️ {error}
             </div>
           )}
 
           {info && (
-            <div className="rounded-xl bg-indigo-500/10 border border-indigo-500/30 p-3 text-xs text-indigo-300">
+            <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-3 text-xs text-indigo-700">
               {info}
             </div>
           )}
@@ -205,7 +204,7 @@ export default function SignUpPage() {
           <button
             type="submit"
             disabled={isPending || !!info}
-            className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-[0_0_20px_rgba(139,92,246,0.4)] hover:bg-violet-500 active:scale-[0.99] disabled:opacity-50 transition-all"
+            className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-50 transition-all"
           >
             {isPending ? (
               <>
@@ -217,11 +216,11 @@ export default function SignUpPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs font-sans text-zinc-500">
+        <p className="mt-6 text-center text-xs font-sans text-slate-500">
           Already have an account?{' '}
           <Link
             href="/login"
-            className="font-mono font-bold text-violet-400 hover:underline"
+            className="font-mono font-bold text-indigo-600 hover:underline"
           >
             Sign in
           </Link>

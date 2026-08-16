@@ -28,14 +28,14 @@ function RangeSlider({
         <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${color}`}>
           {icon} {label}
         </div>
-        <span className="text-sm font-black text-white font-mono">
-          {value}<span className="text-xs text-zinc-500 ml-1">{unit}</span>
+        <span className="text-sm font-black text-slate-900 font-mono">
+          {value}<span className="text-xs text-slate-500 ml-1">{unit}</span>
         </span>
       </div>
       <input
         type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-violet-500 cursor-pointer"
+        className="w-full accent-indigo-600 cursor-pointer"
       />
     </div>
   )
@@ -125,9 +125,9 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070712] text-zinc-100 font-mono flex items-center justify-center p-4">
-      {/* Background glow */}
-      <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-gradient-to-tr from-violet-600/20 via-purple-600/15 to-pink-500/10 blur-[140px]" />
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-mono flex items-center justify-center p-4">
+      {/* Background subtle glow */}
+      <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-gradient-to-tr from-indigo-100/60 via-slate-100/50 to-blue-100/50 blur-[140px]" />
 
       <div className="relative w-full max-w-2xl">
         {/* Header */}
@@ -139,10 +139,10 @@ export default function OnboardingPage() {
           <div className="flex justify-center mb-4">
             <Logo size={48} />
           </div>
-          <h1 className="text-2xl font-black tracking-widest uppercase text-white">
+          <h1 className="text-2xl font-black tracking-widest uppercase text-slate-900">
             INITIALIZING PROFILE
           </h1>
-          <p className="text-xs text-zinc-400 font-sans">
+          <p className="text-xs text-slate-500 font-sans">
             Set your daily habits — we'll suggest the best study schedule to hit your target CGPA.
           </p>
         </motion.div>
@@ -155,12 +155,12 @@ export default function OnboardingPage() {
           className="space-y-6"
         >
           {/* Name + Target CGPA */}
-          <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-4">
-            <div className="text-[10px] font-extrabold tracking-widest text-violet-400 uppercase mb-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
+            <div className="text-[10px] font-extrabold tracking-widest text-indigo-600 uppercase mb-2">
               Your Identity
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400">
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-600">
                 Full Name
               </label>
               <input
@@ -168,25 +168,25 @@ export default function OnboardingPage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Enter your full name"
-                className="w-full rounded-xl border border-white/10 bg-[#070712] px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
               />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-violet-400" /> STARTING CGPA BASELINE
+                <span className="font-bold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-indigo-600" /> STARTING CGPA BASELINE
                 </span>
-                <span className="text-xl font-black text-violet-400">{startingCgpa.toFixed(2)} CGPA</span>
+                <span className="text-xl font-black text-indigo-600">{startingCgpa.toFixed(2)} CGPA</span>
               </div>
-              <div className="rounded-xl border border-violet-500/30 bg-violet-950/30 p-3 text-[11px] text-zinc-300 font-sans leading-relaxed">
-                🎮 <strong className="text-violet-300">Efficiency Scaling (3.00 – 3.50):</strong> Your starting baseline is calculated from your habit efficiency. Answer daily quizzes, complete quests, and submit essays to level up your CGPA to 10.00!
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 text-[11px] text-slate-700 font-sans leading-relaxed">
+                🎮 <strong className="text-indigo-800">Efficiency Scaling (3.00 – 3.50):</strong> Your starting baseline is calculated from your habit efficiency. Answer daily quizzes, complete quests, and submit essays to level up your CGPA to 10.00!
               </div>
             </div>
           </div>
 
           {/* Quick presets */}
-          <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-4">
-            <div className="text-[10px] font-extrabold tracking-widest text-emerald-400 uppercase mb-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
+            <div className="text-[10px] font-extrabold tracking-widest text-emerald-600 uppercase mb-2">
               Quick Schedule Presets
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -195,40 +195,40 @@ export default function OnboardingPage() {
                   key={p.label}
                   type="button"
                   onClick={() => applyPreset(p)}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-3 text-left hover:border-violet-500/50 hover:bg-violet-950/20 transition-all group"
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group"
                 >
-                  <div className="text-xs font-black text-white group-hover:text-violet-300">{p.label}</div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5">{p.desc}</div>
+                  <div className="text-xs font-black text-slate-900 group-hover:text-indigo-600">{p.label}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{p.desc}</div>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Habit sliders */}
-          <div className="rounded-3xl border border-white/10 bg-[#0d0c1d] p-6 space-y-5">
-            <div className="text-[10px] font-extrabold tracking-widest text-amber-400 uppercase mb-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+            <div className="text-[10px] font-extrabold tracking-widest text-amber-600 uppercase mb-2">
               Daily Habits (adjust each night)
             </div>
-            <RangeSlider icon={<Moon className="h-4 w-4" />} label="Sleep" unit="hrs" min={3} max={12} step={0.5} value={sleep} onChange={setSleep} color="text-cyan-400" />
-            <RangeSlider icon={<BookOpen className="h-4 w-4" />} label="Study" unit="hrs" min={0} max={12} step={0.5} value={study} onChange={setStudy} color="text-violet-400" />
-            <RangeSlider icon={<Coffee className="h-4 w-4" />} label="Coffee" unit="cups" min={0} max={8} step={1} value={coffee} onChange={setCoffee} color="text-amber-400" />
-            <RangeSlider icon={<Gamepad2 className="h-4 w-4" />} label="Gaming" unit="hrs" min={0} max={8} step={0.5} value={gaming} onChange={setGaming} color="text-pink-400" />
+            <RangeSlider icon={<Moon className="h-4 w-4" />} label="Sleep" unit="hrs" min={3} max={12} step={0.5} value={sleep} onChange={setSleep} color="text-sky-600" />
+            <RangeSlider icon={<BookOpen className="h-4 w-4" />} label="Study" unit="hrs" min={0} max={12} step={0.5} value={study} onChange={setStudy} color="text-indigo-600" />
+            <RangeSlider icon={<Coffee className="h-4 w-4" />} label="Coffee" unit="cups" min={0} max={8} step={1} value={coffee} onChange={setCoffee} color="text-amber-600" />
+            <RangeSlider icon={<Gamepad2 className="h-4 w-4" />} label="Gaming" unit="hrs" min={0} max={8} step={0.5} value={gaming} onChange={setGaming} color="text-rose-600" />
 
             {/* Live Energy/Stress readout */}
             <div className="grid grid-cols-2 gap-3 mt-2">
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-center">
-                <div className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest">Energy</div>
-                <div className="text-2xl font-black text-emerald-300 mt-1">{energy}%</div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-center">
+                <div className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-widest">Energy</div>
+                <div className="text-2xl font-black text-emerald-600 mt-1">{energy}%</div>
               </div>
-              <div className="rounded-2xl border border-rose-500/30 bg-rose-950/20 p-3 text-center">
-                <div className="text-[10px] font-extrabold text-rose-400 uppercase tracking-widest">Stress</div>
-                <div className="text-2xl font-black text-rose-300 mt-1">{stress}%</div>
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-center">
+                <div className="text-[10px] font-extrabold text-rose-700 uppercase tracking-widest">Stress</div>
+                <div className="text-2xl font-black text-rose-600 mt-1">{stress}%</div>
               </div>
             </div>
 
             {/* AI schedule suggestion */}
-            <div className="rounded-2xl border border-violet-500/20 bg-violet-950/10 p-3 text-xs font-sans text-zinc-300 leading-relaxed">
-              💡 <strong className="text-violet-300">AI Tip:</strong>{' '}
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-3 text-xs font-sans text-slate-700 leading-relaxed">
+              💡 <strong className="text-indigo-800">AI Tip:</strong>{' '}
               {energy >= 70 && stress <= 50
                 ? "Great balance! Your energy is high and stress is manageable. Keep this up for maximum CGPA growth."
                 : energy < 50
@@ -240,7 +240,7 @@ export default function OnboardingPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl bg-violet-600 py-4 text-xs font-black uppercase tracking-widest text-white shadow-[0_0_30px_rgba(139,92,246,0.4)] hover:bg-violet-500 active:scale-[0.99] disabled:opacity-60 transition-all"
+            className="w-full flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-4 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-60 transition-all"
           >
             {isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> CREATING PROFILE...</> : <><Zap className="h-4 w-4 fill-current" /> ENTER THE SIMULATION <ArrowRight className="h-4 w-4" /></>}
           </button>
