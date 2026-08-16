@@ -19,6 +19,7 @@ import {
   Swords,
   Terminal,
   UserCircle,
+  FileText,
 } from 'lucide-react'
 import Logo from './Logo'
 import AvatarSVG, { AvatarId } from './Avatar'
