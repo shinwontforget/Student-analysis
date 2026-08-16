@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenAI, Type } from '@google/genai'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,7 +45,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const topicText = topics.join(', ')
+    // Clamp topic count to avoid excessive token usage
+    const safeTopic = topics.slice(0, 20)
+    const topicText = safeTopic.join(', ')
     const apiKey = process.env.GEMINI_API_KEY
 
     // Helper to generate dynamic questions based on student topics (always strictly 10 questions)
@@ -166,13 +169,13 @@ export async function POST(req: NextRequest) {
       return questions
     }
 
-    if (!apiKey) {
-      const fallbackQuestions = generateTopicSynthesizedQuestions(topics, subject || topics[0])
-      return NextResponse.json({ questions: fallbackQuestions }, { status: 200 })
-    }
+    let allQuestions: any[] = []
 
-    const genAI = new GoogleGenAI({ apiKey })
-    const prompt = `You are an expert university & school exam assessment system.
+    if (!apiKey) {
+      allQuestions = generateTopicSynthesizedQuestions(safeTopic, subject || safeTopic[0])
+    } else {
+      const genAI = new GoogleGenAI({ apiKey })
+      const prompt = `You are an expert university & school exam assessment system.
 Generate EXACTLY 10 targeted multiple-choice assessment questions based strictly on these student topics: ${topicText}.
 Subject area: ${subject || 'Academic Studies'}
 
@@ -186,88 +189,115 @@ Strict Requirements:
 
 Return ONLY valid JSON matching the schema.`
 
-    const modelCandidates = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
-    let parsed: any = null
+      const modelCandidates = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+      let parsed: any = null
 
-    for (const modelName of modelCandidates) {
-      try {
-        const result = await genAI.models.generateContent({
-          model: modelName,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                questions: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      question: { type: Type.STRING },
-                      subject: { type: Type.STRING },
-                      difficulty: { type: Type.STRING },
-                      options: {
-                        type: Type.OBJECT,
-                        properties: {
-                          A: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
-                          B: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
-                          C: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
-                          D: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
+      for (const modelName of modelCandidates) {
+        try {
+          const result = await genAI.models.generateContent({
+            model: modelName,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  questions: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        question: { type: Type.STRING },
+                        subject: { type: Type.STRING },
+                        difficulty: { type: Type.STRING },
+                        options: {
+                          type: Type.OBJECT,
+                          properties: {
+                            A: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
+                            B: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
+                            C: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
+                            D: { type: Type.OBJECT, properties: { text: { type: Type.STRING }, explanation: { type: Type.STRING } }, required: ['text', 'explanation'] },
+                          },
+                          required: ['A', 'B', 'C', 'D'],
                         },
-                        required: ['A', 'B', 'C', 'D'],
+                        correctAnswer: { type: Type.STRING },
                       },
-                      correctAnswer: { type: Type.STRING },
+                      required: ['id', 'question', 'subject', 'difficulty', 'options', 'correctAnswer'],
                     },
-                    required: ['id', 'question', 'subject', 'difficulty', 'options', 'correctAnswer'],
                   },
                 },
+                required: ['questions'],
               },
-              required: ['questions'],
             },
-          },
-        })
+          })
 
-        const text = result.text ?? ''
-        const candidateParsed = JSON.parse(text)
-        if (candidateParsed.questions && candidateParsed.questions.length > 0) {
-          parsed = candidateParsed
-          break
+          const text = result.text ?? ''
+          const candidateParsed = JSON.parse(text)
+          if (candidateParsed.questions && candidateParsed.questions.length > 0) {
+            parsed = candidateParsed
+            break
+          }
+        } catch (err: any) {
+          console.warn(`[Quiz Gen] Model ${modelName} failed, attempting next:`, err.message)
         }
-      } catch (err: any) {
-        console.warn(`[Quiz Gen] Model ${modelName} failed, attempting next:`, err.message)
       }
-    }
 
-    const fallbackQuestions = generateTopicSynthesizedQuestions(topics, subject || topics[0])
+      const fallbackQuestions = generateTopicSynthesizedQuestions(safeTopic, subject || safeTopic[0])
 
-    if (parsed && parsed.questions && parsed.questions.length > 0) {
-      let finalQuestions = parsed.questions.map((q: any, i: number) => ({
-        ...q,
-        id: `q_${i + 1}`,
-        subject: q.subject || subject || topics[0] || 'General',
-      }))
-
-      // Ensure strictly 10 questions by padding if Gemini generated fewer than 10
-      if (finalQuestions.length < 10) {
-        const needed = 10 - finalQuestions.length
-        const padding = fallbackQuestions.slice(0, needed).map((q, idx) => ({
+      if (parsed && parsed.questions && parsed.questions.length > 0) {
+        let finalQuestions = parsed.questions.map((q: any, i: number) => ({
           ...q,
-          id: `q_${finalQuestions.length + idx + 1}`,
+          id: `q_${i + 1}`,
+          subject: q.subject || subject || safeTopic[0] || 'General',
         }))
-        finalQuestions = [...finalQuestions, ...padding]
-      } else if (finalQuestions.length > 10) {
-        finalQuestions = finalQuestions.slice(0, 10)
-      }
 
-      return NextResponse.json({ questions: finalQuestions }, { status: 200 })
+        if (finalQuestions.length < 10) {
+          const needed = 10 - finalQuestions.length
+          const padding = fallbackQuestions.slice(0, needed).map((q, idx) => ({
+            ...q,
+            id: `q_${finalQuestions.length + idx + 1}`,
+          }))
+          finalQuestions = [...finalQuestions, ...padding]
+        } else if (finalQuestions.length > 10) {
+          finalQuestions = finalQuestions.slice(0, 10)
+        }
+
+        allQuestions = finalQuestions
+      } else {
+        allQuestions = fallbackQuestions
+      }
     }
 
-    // High quality synthesis fallback guaranteeing strictly 10 questions
-    return NextResponse.json({ questions: fallbackQuestions }, { status: 200 })
+    // ── Security: Store quiz session server-side ──────────────────────────────
+    // We save the full questions (including correctAnswer) in the DB so that
+    // /api/quiz/submit can recalculate the score server-side and never trust
+    // a client-supplied correctAnswers count.
+    const adminSupabase = createAdminClient()
+    const { data: sessionRow, error: sessionErr } = await adminSupabase
+      .from('quiz_sessions')
+      .insert({
+        user_id: user.id,
+        questions: allQuestions,
+        expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2-hour window
+      })
+      .select('id')
+      .single()
+
+    if (sessionErr || !sessionRow) {
+      console.error('[Quiz Gen] Failed to create session:', sessionErr)
+      // Still serve the questions but without session enforcement (graceful fallback)
+    }
+
+    // Strip correctAnswer before sending to client — only keep it server-side
+    const clientQuestions = allQuestions.map(({ correctAnswer, ...rest }: any) => rest)
+
+    return NextResponse.json({
+      questions: clientQuestions,
+      session_id: sessionRow?.id ?? null,
+    }, { status: 200 })
   } catch (err: any) {
     console.error('[/api/quiz/generate]', err)
-    return NextResponse.json({ error: err.message || 'Failed to generate quiz' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to generate quiz. Please try again.' }, { status: 500 })
   }
 }

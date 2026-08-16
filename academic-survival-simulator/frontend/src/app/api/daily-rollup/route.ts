@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Daily Rollup Endpoint
@@ -42,6 +43,14 @@ export async function POST(req: NextRequest) {
       // If never rolled up, start from user's creation date (or yesterday)
       const createdDate = new Date(profile.created_at || profile.semester_start_date || today)
       lastRollupStr = createdDate.toISOString().split('T')[0]
+    }
+
+    // Safety window: clamp rollup range to at most 30 days in the past
+    const maxPastWindow = new Date(today)
+    maxPastWindow.setDate(maxPastWindow.getDate() - 30)
+    const maxPastWindowStr = maxPastWindow.toISOString().split('T')[0]
+    if (lastRollupStr < maxPastWindowStr) {
+      lastRollupStr = maxPastWindowStr
     }
 
     // If last rollup is already yesterday or today, nothing to process
@@ -157,7 +166,9 @@ export async function POST(req: NextRequest) {
     const newCgpa = Math.max(0, Math.min(10, parseFloat((currentCgpa + totalAccumulatedDelta).toFixed(2))))
 
     // 5. Update user record with new CGPA and last_rollup_date
-    await supabase
+    //    Use adminClient to bypass user-scoped RLS so the server can safely write CGPA.
+    const adminSupabase = createAdminClient()
+    await adminSupabase
       .from('users')
       .update({
         cgpa: newCgpa,
@@ -176,6 +187,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (err: any) {
     console.error('[/api/daily-rollup]', err)
-    return NextResponse.json({ error: err.message || 'Rollup failed' }, { status: 500 })
+    return NextResponse.json({ error: 'Rollup failed. Please try again later.' }, { status: 500 })
   }
 }

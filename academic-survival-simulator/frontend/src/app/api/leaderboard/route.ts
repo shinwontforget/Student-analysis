@@ -1,67 +1,89 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { GamificationEngine } from '@/lib/services/gamificationEngine'
 
-// Force dynamic rendering — this route uses cookies() via Supabase server client
+// Force dynamic rendering — this route reads server data
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // 0. Require authenticated session — leaderboard contains user PII
     const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized: Session required' }, { status: 401 })
+    }
 
-    // Query users and Critical Thinking submissions
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, full_name, avatar_id, cgpa, student_level, student_field')
+    const adminSupabase = createAdminClient()
 
     const startOfMonth = new Date()
     startOfMonth.setDate(1)
     startOfMonth.setHours(0, 0, 0, 0)
 
-    const { data: ctSubmissions } = await supabase
+    // 1. Fetch only active submissions for the current month
+    const { data: ctSubmissions, error: ctErr } = await adminSupabase
       .from('critical_thinking_submissions')
       .select('user_id, quality_score, uniqueness_score')
       .gte('created_at', startOfMonth.toISOString())
 
-    const userMap = new Map<string, {
-      id: string
-      name: string
-      cgpa: number
-      score: number
-    }>()
-
-    if (users) {
-      users.forEach((u) => {
-        userMap.set(u.id, {
-          id: u.id,
-          name: u.full_name || 'Scholar',
-          cgpa: Number(u.cgpa) || 3.0,
-          score: 0,
-        })
-      })
+    if (ctErr) {
+      console.error('[Leaderboard CT Error]:', ctErr)
     }
 
+    // 2. Aggregate monthly scores per active user in O(M) time
+    const userScores = new Map<string, number>()
     if (ctSubmissions) {
-      ctSubmissions.forEach((s) => {
-        const existing = userMap.get(s.user_id)
-        if (existing) {
-          existing.score += (s.quality_score ?? 0) + (s.uniqueness_score ?? 0)
+      for (const s of ctSubmissions) {
+        const pts = (s.quality_score ?? 0) + (s.uniqueness_score ?? 0)
+        if (pts > 0 && s.user_id) {
+          userScores.set(s.user_id, (userScores.get(s.user_id) || 0) + pts)
         }
+      }
+    }
+
+    if (userScores.size === 0) {
+      return NextResponse.json({
+        leaderboard: [],
+        total: 0,
+        cached_at: new Date().toISOString(),
       })
     }
 
-    const formattedLeaderboard = Array.from(userMap.values())
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((entry, index) => ({
+    // 3. Sort active user IDs by highest score and take top 100
+    const topEntries = Array.from(userScores.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 100)
+
+    const topUserIds = topEntries.map(([id]) => id)
+
+    // 4. Query ONLY the top 100 active users instead of dumping the entire user database
+    const { data: users } = await adminSupabase
+      .from('users')
+      .select('id, full_name, avatar_id, cgpa, student_level, student_field')
+      .in('id', topUserIds)
+
+    const userProfileMap = new Map<string, any>()
+    if (users) {
+      for (const u of users) {
+        userProfileMap.set(u.id, u)
+      }
+    }
+
+    // 5. Build final sorted leaderboard response in O(K) where K <= 100
+    const formattedLeaderboard = topEntries.map(([userId, score], index) => {
+      const profile = userProfileMap.get(userId)
+      const cgpa = Number(profile?.cgpa) || 3.0
+      return {
         rank: index + 1,
-        id: entry.id,
-        user_id: entry.id,
-        display_name: entry.name,
-        score: entry.score,
-        cgpa: entry.cgpa,
-        class_title: GamificationEngine.getClassTitle(entry.cgpa),
-      }))
+        id: userId,
+        user_id: userId,
+        display_name: profile?.full_name || 'Scholar',
+        score,
+        cgpa,
+        class_title: GamificationEngine.getClassTitle(cgpa),
+      }
+    })
 
     return NextResponse.json(
       {

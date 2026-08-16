@@ -23,10 +23,16 @@ export async function POST(request: NextRequest) {
 
     // 2. Parse request payload
     const body = await request.json().catch(() => ({}))
-    const conceptTitle = (body.conceptTitle || body.concept || body.title || '').trim()
-    const conceptSubject = (body.conceptSubject || body.subject || 'General Academic Studies').trim()
-    let rawSummary = (body.conceptSummary || body.summary || body.notes || '').trim()
-    const mode = body.mode || body.action || 'explain' // 'explain' | 'improve'
+
+    // Security: enforce strict input length limits to prevent token-inflation abuse
+    const MAX_TITLE_LEN = 200
+    const MAX_SUBJECT_LEN = 100
+    const MAX_SUMMARY_LEN = 4000
+
+    const conceptTitle = ((body.conceptTitle || body.concept || body.title || '') as string).trim().substring(0, MAX_TITLE_LEN)
+    const conceptSubject = ((body.conceptSubject || body.subject || 'General Academic Studies') as string).trim().substring(0, MAX_SUBJECT_LEN)
+    let rawSummary = ((body.conceptSummary || body.summary || body.notes || '') as string).trim().substring(0, MAX_SUMMARY_LEN)
+    const mode = (body.mode || body.action || 'explain') as string // 'explain' | 'improve'
 
     // Clean rawSummary to strip out previously prepended boilerplate prefixes
     const cleanSummary = rawSummary
@@ -208,7 +214,7 @@ Please aggressively summarize and synthesize the core concepts from <student_raw
   } catch (err: any) {
     console.error('[Mascot Explain API Error]:', err)
     return NextResponse.json(
-      { error: err.message || 'Internal Server Error' },
+      { error: 'An internal error occurred. Please try again.' },
       { status: 500 }
     )
   }

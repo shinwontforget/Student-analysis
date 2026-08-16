@@ -56,11 +56,11 @@ class GPAEngine:
             },
         }
 
-    def unlocked_essay_mode(self, cgpa: float, is_premium: bool = False) -> bool:
+    def unlocked_essay_mode(self, cgpa: float = 0.0, is_premium: bool = False) -> bool:
         """
-        Returns True if Essay Mode is unlocked (cgpa >= 7.5 OR is_premium == True).
+        Merit Lock: Essay Mode is unlocked strictly when CGPA >= 7.50.
         """
-        return bool(cgpa >= self.ESSAY_UNLOCK_THRESHOLD or is_premium)
+        return bool(cgpa >= self.ESSAY_UNLOCK_THRESHOLD)
 
     def process_assessment_dataframe(self, df: pd.DataFrame, initial_cgpa: float = 0.0) -> pd.DataFrame:
         """

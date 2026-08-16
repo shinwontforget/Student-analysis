@@ -1,9 +1,6 @@
 -- =============================================================================
 -- Academic Survival Simulator — Master Supabase SQL Schema
 -- =============================================================================
--- Copy and paste this ENTIRE block into your Supabase SQL Editor:
--- https://supabase.com/dashboard/project/bncngyawdtxjznjzoyps/sql/new
---
 -- This script is fully idempotent (safe to run multiple times without errors).
 -- =============================================================================
 
@@ -39,17 +36,38 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_rollup_date   date;
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
+-- Clean up any legacy permissive select policies
+DROP POLICY IF EXISTS "users: leaderboard select" ON public.users;
 DROP POLICY IF EXISTS "users: select own row" ON public.users;
 CREATE POLICY "users: select own row" ON public.users FOR SELECT USING (id = auth.uid());
-
-DROP POLICY IF EXISTS "users: leaderboard select" ON public.users;
-CREATE POLICY "users: leaderboard select" ON public.users FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "users: insert own row" ON public.users;
 CREATE POLICY "users: insert own row" ON public.users FOR INSERT WITH CHECK (id = auth.uid());
 
 DROP POLICY IF EXISTS "users: update own row" ON public.users;
 CREATE POLICY "users: update own row" ON public.users FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+
+-- SECURITY TRIGGER: Prevent regular users from directly modifying sensitive columns
+CREATE OR REPLACE FUNCTION public.protect_sensitive_user_columns()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- If update is initiated by a regular user session (not service_role)
+  IF (current_setting('request.jwt.claim.role', true) <> 'service_role') THEN
+    IF (NEW.is_premium IS DISTINCT FROM OLD.is_premium) OR
+       (NEW.user_type IS DISTINCT FROM OLD.user_type) OR
+       (NEW.cgpa IS DISTINCT FROM OLD.cgpa) OR
+       (NEW.premium_expires_at IS DISTINCT FROM OLD.premium_expires_at) THEN
+      RAISE EXCEPTION 'Unauthorized: Mutating is_premium, user_type, or cgpa directly is forbidden.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_users_columns_trg ON public.users;
+CREATE TRIGGER protect_users_columns_trg
+BEFORE UPDATE ON public.users
+FOR EACH ROW EXECUTE FUNCTION public.protect_sensitive_user_columns();
 
 
 -- ---------------------------------------------------------------------------
@@ -194,14 +212,20 @@ ALTER TABLE public.leaderboard ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "leaderboard: public select" ON public.leaderboard;
 CREATE POLICY "leaderboard: public select" ON public.leaderboard FOR SELECT USING (true);
 
+-- Clean up any legacy owner write policies
 DROP POLICY IF EXISTS "leaderboard: owner write" ON public.leaderboard;
-CREATE POLICY "leaderboard: owner write" ON public.leaderboard FOR INSERT WITH CHECK (user_id = auth.uid());
-
 DROP POLICY IF EXISTS "leaderboard: owner update" ON public.leaderboard;
-CREATE POLICY "leaderboard: owner update" ON public.leaderboard FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
-
 DROP POLICY IF EXISTS "leaderboard: owner delete" ON public.leaderboard;
-CREATE POLICY "leaderboard: owner delete" ON public.leaderboard FOR DELETE USING (user_id = auth.uid());
+
+-- Direct writes restricted to server-side service_role (prevent client score tampering)
+DROP POLICY IF EXISTS "leaderboard: service_role insert" ON public.leaderboard;
+CREATE POLICY "leaderboard: service_role insert" ON public.leaderboard FOR INSERT WITH CHECK (auth.role() = 'service_role');
+
+DROP POLICY IF EXISTS "leaderboard: service_role update" ON public.leaderboard;
+CREATE POLICY "leaderboard: service_role update" ON public.leaderboard FOR UPDATE USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+DROP POLICY IF EXISTS "leaderboard: service_role delete" ON public.leaderboard;
+CREATE POLICY "leaderboard: service_role delete" ON public.leaderboard FOR DELETE USING (auth.role() = 'service_role');
 
 
 -- ---------------------------------------------------------------------------
@@ -295,3 +319,31 @@ $$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+-- ---------------------------------------------------------------------------
+-- 11. quiz_sessions — server-side quiz session tracking (anti-spoofing)
+-- ---------------------------------------------------------------------------
+-- Stores generated quiz questions server-side so /api/quiz/submit can verify
+-- that correctAnswers is re-calculated server-side, not trusted from client.
+CREATE TABLE IF NOT EXISTS public.quiz_sessions (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  questions       jsonb NOT NULL,                 -- full question array with correctAnswer
+  expires_at      timestamptz NOT NULL DEFAULT (now() + interval '2 hours'),
+  submitted_at    timestamptz,                    -- null = not yet submitted; set on first submit
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.quiz_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "quiz_sessions: owner all" ON public.quiz_sessions;
+CREATE POLICY "quiz_sessions: owner all" ON public.quiz_sessions
+  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+
+-- Auto-delete expired sessions (optional — run manually or via pg_cron)
+-- DELETE FROM public.quiz_sessions WHERE expires_at < now();
+
+-- Fix: remove duplicate SELECT policy on critical_thinking_submissions
+-- (keep only the "owner all" FOR ALL policy, drop the redundant SELECT-only one)
+DROP POLICY IF EXISTS "ct_submissions: owner select" ON public.critical_thinking_submissions;

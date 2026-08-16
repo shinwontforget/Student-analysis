@@ -93,7 +93,7 @@ export default function HomeClient() {
           </h1>
 
           <p className="mx-auto max-w-2xl text-sm text-zinc-400 leading-relaxed font-sans">
-            S-Curve CGPA engine, daily quizzes, AI mascot companion, critical thinking leaderboard, and Razorpay premium passes. Your academic survival starts here.
+            S-Curve CGPA engine, daily quizzes, AI mascot companion, critical thinking leaderboard, and open access essay evaluation. Your academic survival starts here.
           </p>
 
           <div className="flex justify-center pt-2">
@@ -107,7 +107,7 @@ export default function HomeClient() {
 
           {/* Mini stats */}
           <div className="flex flex-wrap justify-center gap-6 pt-4 text-xs text-zinc-500 font-sans">
-            {['S-Curve GPA Engine', 'Gemini AI Grading', 'Razorpay Payments', 'Supabase Auth', 'Monthly Leaderboard'].map((s) => (
+            {['S-Curve GPA Engine', 'Gemini AI Grading', 'Open Access Mode', 'Supabase Auth', 'Monthly Leaderboard'].map((s) => (
               <span key={s} className="flex items-center gap-1.5">
                 <span className="h-1 w-1 rounded-full bg-violet-400" /> {s}
               </span>

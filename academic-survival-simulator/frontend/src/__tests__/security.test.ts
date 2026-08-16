@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import crypto from 'crypto'
 import { NextRequest } from 'next/server'
 
 // Import API route handlers for direct unit testing
-import { POST as createOrderHandler } from '../app/api/subscription/create-order/route'
-import { POST as webhookHandler } from '../app/api/subscription/webhook/route'
+import { POST as quizSubmitHandler } from '../app/api/quiz/submit/route'
+import { GET as leaderboardGetHandler } from '../app/api/leaderboard/route'
 import { POST as leaderboardSubmitHandler } from '../app/api/leaderboard/submit/route'
 import { POST as evaluateThinkingHandler } from '../app/api/evaluate-thinking/route'
 
@@ -34,108 +33,36 @@ describe('Frontend Security Suite', () => {
     vi.clearAllMocks()
   })
 
-  describe('1. Razorpay Webhook HMAC Signature Rejection', () => {
-    it('rejects requests with an invalid Razorpay signature (HTTP 400)', async () => {
-      const payload = JSON.stringify({
-        event: 'payment.captured',
-        payload: { payment: { entity: { id: 'pay_123', notes: { user_id: 'user_abc' } } } },
-      })
-
-      const req = new NextRequest('http://localhost:3000/api/subscription/webhook', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-razorpay-signature': 'invalid_forged_hmac_signature',
-        },
-        body: payload,
-      })
-
-      const response = await webhookHandler(req)
-      expect(response.status).toBe(400)
-      const data = await response.json()
-      expect(data.error).toContain('Invalid Razorpay HMAC signature')
-    })
-
-    it('accepts requests with a valid Razorpay HMAC signature', async () => {
-      const secret = process.env.RAZORPAY_KEY_SECRET || 'rzp_secret_placeholder'
-      const payload = JSON.stringify({
-        event: 'payment.captured',
-        payload: {
-          payment: {
-            entity: {
-              id: 'pay_test_valid',
-              order_id: 'order_test_valid',
-              notes: { user_id: 'user_123', plan_id: 'monthly' },
-            },
-          },
-        },
-      })
-
-      const validSignature = crypto
-        .createHmac('sha256', secret)
-        .update(payload)
-        .digest('hex')
-
-      // Mock admin Supabase user query and update
-      const { createAdminClient } = await import('@/lib/supabase/admin')
-      const mockAdminSupabase = {
-        from: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: { id: 'user_123', cgpa: 7.0, is_premium: false, premium_expires_at: null },
-          error: null,
-        }),
-        update: vi.fn().mockReturnThis(),
-        upsert: vi.fn().mockResolvedValue({ error: null }),
-      }
-      vi.mocked(createAdminClient).mockReturnValue(mockAdminSupabase as any)
-
-      const req = new NextRequest('http://localhost:3000/api/subscription/webhook', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-razorpay-signature': validSignature,
-        },
-        body: payload,
-      })
-
-      const response = await webhookHandler(req)
-      expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.status).toBe('success')
-    })
-  })
-
-  describe('2. Server-Authoritative Pricing & Client Amount Rejection', () => {
-    it('rejects requests containing client-supplied amounts (HTTP 400)', async () => {
+  describe('1. Quiz Score Validation & Bounds Guard', () => {
+    it('rejects submissions where correctAnswers exceeds totalQuestions (HTTP 400)', async () => {
       const { createClient } = await import('@/lib/supabase/server')
       vi.mocked(createClient).mockResolvedValue({
         auth: {
           getUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 'user_test' } },
+            data: { user: { id: 'user_quiz_attacker' } },
             error: null,
           }),
         },
       } as any)
 
-      const req = new NextRequest('http://localhost:3000/api/subscription/create-order', {
+      const req = new NextRequest('http://localhost:3000/api/quiz/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          planId: 'monthly',
-          amount: 1, // Malicious client attempting to pay ₹0.01
+          subject: 'Operating Systems',
+          correctAnswers: 20,
+          totalQuestions: 10, // Invalid: correct > total
         }),
       })
 
-      const response = await createOrderHandler(req)
+      const response = await quizSubmitHandler(req)
       expect(response.status).toBe(400)
       const data = await response.json()
-      expect(data.error).toContain('Security Violation')
+      expect(data.error).toContain('Invalid quiz score parameters')
     })
   })
 
-  describe('3. Leaderboard GPA-Mismatch Rejection', () => {
+  describe('2. Leaderboard GPA-Mismatch Rejection', () => {
     it('rejects leaderboard submissions where client expected GPA differs from server calculation (HTTP 400)', async () => {
       const { createClient } = await import('@/lib/supabase/server')
       vi.mocked(createClient).mockResolvedValue({
@@ -219,12 +146,65 @@ describe('Frontend Security Suite', () => {
     })
   })
 
-  describe('5. RLS Denial & is_premium Security Guard', () => {
-    it('verifies non-admin clients cannot mutate is_premium directly', async () => {
-      // In Supabase, the public.users table enforces RLS where users can only update allowed fields (e.g. full_name)
-      // and service_role admin client is required for updating subscription/is_premium state.
+  describe('5. Leaderboard Authentication & PII Protection Guard', () => {
+    it('rejects unauthenticated requests attempting to view the leaderboard (HTTP 401)', async () => {
+      const { createClient } = await import('@/lib/supabase/server')
+      vi.mocked(createClient).mockResolvedValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: null },
+            error: new Error('Session not found'),
+          }),
+        },
+      } as any)
+
+      const req = new NextRequest('http://localhost:3000/api/leaderboard', {
+        method: 'GET',
+      })
+
+      const response = await leaderboardGetHandler(req)
+      expect(response.status).toBe(401)
+      const data = await response.json()
+      expect(data.error).toContain('Unauthorized')
+    })
+  })
+
+  describe('6. Server-Side Quiz Session Anti-Spoofing Guard', () => {
+    it('rejects quiz submissions with invalid or expired session_id (HTTP 404)', async () => {
+      const { createClient } = await import('@/lib/supabase/server')
       const { createAdminClient } = await import('@/lib/supabase/admin')
-      expect(createAdminClient).toBeDefined()
+
+      vi.mocked(createClient).mockResolvedValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: 'legit_user' } },
+            error: null,
+          }),
+        },
+      } as any)
+
+      vi.mocked(createAdminClient).mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: vi.fn().mockResolvedValue({ data: null, error: new Error('Session not found') }),
+        }),
+      } as any)
+
+      const req = new NextRequest('http://localhost:3000/api/quiz/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: 'Algorithms',
+          session_id: 'fake_or_expired_session_id',
+          answers: { q_1: 'A', q_2: 'B' },
+        }),
+      })
+
+      const response = await quizSubmitHandler(req)
+      expect(response.status).toBe(404)
+      const data = await response.json()
+      expect(data.error).toContain('Invalid or expired quiz session')
     })
   })
 })

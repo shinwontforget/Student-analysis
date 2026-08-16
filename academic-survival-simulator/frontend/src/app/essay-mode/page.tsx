@@ -13,367 +13,463 @@ import {
   Award,
   BookOpen,
   RefreshCw,
+  Clock,
+  Play,
+  Pause,
+  ChevronRight,
+  ShieldAlert,
+  Zap,
 } from 'lucide-react'
-import PremiumUpsellCard from '@/components/PremiumUpsellCard'
-
-interface ChallengePrompt {
-  id: string
-  title: string
-  subject: string
-  promptText: string
-  suggestedWords: number
-}
-
-const CHALLENGES: ChallengePrompt[] = [
-  {
-    id: 'ch_1',
-    title: 'Monolithic vs. Microservices Trade-offs',
-    subject: 'Software Architecture',
-    promptText:
-      'Analyze the core trade-offs between a Monolithic architecture and a Microservices architecture for a high-concurrency e-commerce application. Discuss network latency, data consistency (CAP theorem), and operational deployment complexity.',
-    suggestedWords: 250,
-  },
-  {
-    id: 'ch_2',
-    title: 'Ethical Implications of Autonomous AI',
-    subject: 'AI & Society',
-    promptText:
-      'Evaluate the ethical and accountability challenges when deploying autonomous AI systems in medical diagnostics. Who bears legal liability in cases of misdiagnosis, and how can algorithmic bias be mitigated?',
-    suggestedWords: 300,
-  },
-  {
-    id: 'ch_3',
-    title: 'CPU Scheduling & Thread Synchronization',
-    subject: 'Operating Systems',
-    promptText:
-      'Explain how Priority Inversion occurs in real-time operating systems and how Priority Inheritance Protocol resolves it. Contrast this with semaphore deadlock prevention.',
-    suggestedWords: 200,
-  },
-]
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
+import {
+  EXAM_PROMPTS,
+  FIELD_LABELS,
+  LEVEL_LABELS,
+  getPromptsForUser,
+  ExamPrompt,
+  StudentLevel,
+  StudentField,
+} from '@/data/essay-challenges'
+import { toast } from '@/components/Toast'
 
 export default function EssayModePage() {
-  const [selectedChallenge, setSelectedChallenge] = useState<ChallengePrompt>(CHALLENGES[0])
-  const [answerText, setAnswerText] = useState<string>('')
-  const [loading, setLoading] = useState<boolean>(false)
-  const [evaluationResult, setEvaluationResult] = useState<any>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const supabase = createClient()
 
-  // Status checks for Essay Mode unlock
+  // User Profile State
   const [userProfile, setUserProfile] = useState<{
     id: string
+    full_name: string
     cgpa: number
-    is_premium: boolean
-  }>({ id: 'local_user', cgpa: 7.1, is_premium: false })
+    student_level: StudentLevel
+    student_field: StudentField
+  } | null>(null)
+  const [loadingUser, setLoadingUser] = useState(true)
 
-  const [unlockedEssayMode, setUnlockedEssayMode] = useState<boolean>(false)
-  const [loadingStatus, setLoadingStatus] = useState<boolean>(true)
+  // 5 Exam Questions for User's Field/Level
+  const [examPrompts, setExamPrompts] = useState<ExamPrompt[]>([])
+  const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [evaluations, setEvaluations] = useState<Record<string, any>>({})
+  const [evaluatingQuestionId, setEvaluatingQuestionId] = useState<string | null>(null)
 
-  const checkStatus = async () => {
-    setLoadingStatus(true)
-    try {
-      const res = await fetch('/api/analytics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'calculate-gpa', quizScore: 85 }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setUserProfile({
-          id: data.user_id || 'user_demo',
-          cgpa: data.cgpa ?? 7.1,
-          is_premium: data.is_premium ?? false,
-        })
-        const unlocked =
-          data.gpa_calculation?.unlocked_essay_mode ?? (data.cgpa >= 7.5 || data.is_premium)
-        setUnlockedEssayMode(unlocked)
-      }
-    } catch {
-      setUnlockedEssayMode(userProfile.cgpa >= 7.5 || userProfile.is_premium)
-    } finally {
-      setLoadingStatus(false)
-    }
-  }
+  // 60-Minute Exam Timer State (in seconds)
+  const [timeLeft, setTimeLeft] = useState<number>(60 * 60)
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false)
 
+  // Load User and 5 Field-Specific Exam Prompts
   useEffect(() => {
-    checkStatus()
+    async function loadUser() {
+      setLoadingUser(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('id, full_name, cgpa, student_level, student_field')
+          .eq('id', user.id)
+          .single()
+
+        if (profile) {
+          const lvl = (profile.student_level as StudentLevel) || 'college'
+          const fld = (profile.student_field as StudentField) || 'computer_science'
+          const cgpa = Number(profile.cgpa) || 3.0
+
+          setUserProfile({
+            id: profile.id,
+            full_name: profile.full_name || 'Scholar',
+            cgpa,
+            student_level: lvl,
+            student_field: fld,
+          })
+
+          const prompts = getPromptsForUser(fld, lvl)
+          const fivePrompts = prompts.length >= 5 ? prompts.slice(0, 5) : prompts
+          setExamPrompts(fivePrompts)
+        }
+      }
+      setLoadingUser(false)
+    }
+    loadUser()
   }, [])
 
-  const handleSubmitEssay = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!answerText.trim()) return
+  // Timer Tick
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (isTimerRunning && timeLeft > 0) {
+      interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000)
+    }
+    return () => clearInterval(interval)
+  }, [isTimerRunning, timeLeft])
 
-    setLoading(true)
-    setErrorMessage(null)
-    setEvaluationResult(null)
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
 
+  const isUnlocked = (userProfile?.cgpa ?? 0) >= 7.50
+  const activePrompt = examPrompts[activeQuestionIdx] || examPrompts[0]
+  const currentAnswer = activePrompt ? (answers[activePrompt.id] || '') : ''
+  const currentEval = activePrompt ? evaluations[activePrompt.id] : null
+
+  const handleEvaluateCurrent = async () => {
+    if (!activePrompt || !currentAnswer.trim() || !userProfile) return
+
+    setEvaluatingQuestionId(activePrompt.id)
     try {
       const res = await fetch('/api/evaluate-thinking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          challengeId: selectedChallenge.id,
-          prompt: selectedChallenge.promptText,
-          answerText: answerText.trim(),
+          challengeId: activePrompt.id,
+          prompt: activePrompt.promptText,
+          answerText: currentAnswer.trim(),
         }),
       })
 
       const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Evaluation failed')
+      if (res.ok && data.success) {
+        setEvaluations((prev) => ({ ...prev, [activePrompt.id]: data.evaluation }))
+        toast(`Question ${activeQuestionIdx + 1} Evaluated! Score: ${data.evaluation.quality_score + data.evaluation.uniqueness_score}/200`, 'success')
+      } else {
+        toast(data.error || 'Evaluation failed.', 'error')
       }
-
-      setEvaluationResult(data.evaluation)
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Error evaluating essay submission.')
+    } catch {
+      toast('Error submitting response.', 'error')
     } finally {
-      setLoading(false)
+      setEvaluatingQuestionId(null)
     }
   }
 
-  const wordCount = answerText.trim().split(/\s+/).filter(Boolean).length
-
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 sm:p-8 space-y-8">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-              Phase 5 Feature
-            </span>
-            <span className="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[10px] text-indigo-300 border border-indigo-500/30">
-              Gemini AI Evaluator
-            </span>
-          </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
-            <FileText className="h-7 w-7 text-indigo-400" /> Essay Writing & Critical Thinking Mode
-          </h1>
-          <p className="text-xs text-zinc-400 mt-1">
-            Write long-form analytical responses and receive real-time Gemini AI scoring & structured feedback.
-          </p>
-        </div>
-
-        {/* Status Pill */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div
-            className={`rounded-xl border px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 ${
-              unlockedEssayMode
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                : 'border-rose-500/40 bg-rose-500/10 text-rose-300'
-            }`}
-          >
-            {unlockedEssayMode ? (
-              <>
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Essay Mode Unlocked
-              </>
-            ) : (
-              <>
-                <Lock className="h-4 w-4 text-rose-400" /> Locked (CGPA &lt; 7.5)
-              </>
-            )}
-          </div>
+  if (loadingUser) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+          <span className="text-xs font-mono text-slate-500">Loading Honor Exam Arena...</span>
         </div>
       </div>
+    )
+  }
 
-      {/* LOCKED ESSAY MODE UPSELL CARD */}
-      {!loadingStatus && !unlockedEssayMode && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-4 text-xs text-rose-300 flex items-center gap-3">
-            <Lock className="h-5 w-5 shrink-0" />
-            <div>
-              <strong className="block text-white text-sm">Essay Mode Access Restricted</strong>
-              Standard tier requires a minimum CGPA of 7.5 to unlock Essay Mode. Upgrade to Premium to instantly bypass limits!
-            </div>
-          </div>
-
-          <PremiumUpsellCard
-            cgpa={userProfile.cgpa}
-            userId={userProfile.id}
-            onSubscriptionSuccess={checkStatus}
-          />
-        </div>
-      )}
-
-      {/* UNLOCKED ESSAY MODE INTERFACE */}
-      {unlockedEssayMode && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Challenge Selector & Submission Form (7 cols) */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* Prompt Selector */}
-            <div className="rounded-2xl border border-white/10 bg-zinc-900/70 p-6 backdrop-blur-xl space-y-4">
-              <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
-                Select Critical Thinking Prompt
+  return (
+    <main className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans p-4 sm:p-8 space-y-6 select-none">
+      <div className="mx-auto max-w-5xl space-y-6">
+        
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+                Honors Examination Division
               </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {CHALLENGES.map((ch) => (
-                  <button
-                    key={ch.id}
-                    onClick={() => {
-                      setSelectedChallenge(ch)
-                      setEvaluationResult(null)
-                    }}
-                    className={`text-left rounded-xl border p-3.5 transition-all ${
-                      selectedChallenge.id === ch.id
-                        ? 'border-indigo-500 bg-indigo-600/20 shadow-[0_0_20px_rgba(99,102,241,0.2)]'
-                        : 'border-white/10 bg-zinc-950/60 hover:border-white/20'
-                    }`}
-                  >
-                    <span className="text-[10px] font-bold text-indigo-400 uppercase block mb-1">
-                      {ch.subject}
-                    </span>
-                    <h4 className="font-semibold text-white text-xs line-clamp-2">{ch.title}</h4>
-                  </button>
-                ))}
-              </div>
-
-              {/* Active Prompt Text */}
-              <div className="rounded-xl border border-white/10 bg-zinc-950 p-4">
-                <h4 className="text-sm font-semibold text-white mb-1">{selectedChallenge.title}</h4>
-                <p className="text-xs text-zinc-300 leading-relaxed">{selectedChallenge.promptText}</p>
-                <span className="text-[10px] text-zinc-500 mt-2 block">
-                  Target: ~{selectedChallenge.suggestedWords} words
-                </span>
-              </div>
+              <span className="text-xs text-slate-500 font-mono">
+                1-Hour • 5-Question Subjective Session
+              </span>
             </div>
-
-            {/* Essay Input Form */}
-            <form onSubmit={handleSubmitEssay} className="rounded-2xl border border-white/10 bg-zinc-900/70 p-6 backdrop-blur-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <FileText className="h-4 w-4 text-indigo-400" /> Write Response
-                </span>
-                <span className="text-xs text-zinc-400 font-mono">
-                  {wordCount} words | {answerText.length} / 3000 chars
-                </span>
-              </div>
-
-              <textarea
-                value={answerText}
-                onChange={(e) => setAnswerText(e.target.value)}
-                placeholder="Type your critical analysis response here..."
-                rows={10}
-                className="w-full rounded-xl bg-zinc-950 border border-white/10 p-4 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 leading-relaxed"
-                required
-              />
-
-              {errorMessage && (
-                <div className="rounded-lg bg-rose-500/20 border border-rose-500/40 p-3 text-xs text-rose-300">
-                  ⚠️ {errorMessage}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading || !answerText.trim()}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 hover:brightness-110 disabled:opacity-50 transition-all"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Gemini AI Evaluating...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" /> Evaluate Submission with Gemini AI
-                  </>
-                )}
-              </button>
-            </form>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+              <FileText className="h-6 w-6 text-indigo-600" /> Comprehensive Subjective Exam
+            </h1>
+            <p className="text-xs text-slate-500 mt-1 font-sans">
+              Rigorous 5-question examination for {userProfile ? FIELD_LABELS[userProfile.student_field] : 'your discipline'}. Evaluated by Gemini AI for depth, originality, and analytical synthesis.
+            </p>
           </div>
 
-          {/* Gemini AI Evaluation Dashboard Output (5 cols) */}
-          <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-zinc-900/70 p-6 backdrop-blur-xl space-y-5">
-            <div className="border-b border-white/10 pb-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-indigo-400" /> AI Evaluation Report
-              </h3>
-              <p className="text-xs text-zinc-400">
-                Structured feedback, score breakdown, and improvement tips.
+          {/* Status Pill */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div
+              className={`rounded-xl border px-4 py-2 text-xs font-bold flex items-center gap-2 ${
+                isUnlocked
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-rose-200 bg-rose-50 text-rose-700'
+              }`}
+            >
+              {isUnlocked ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" /> MERIT UNLOCKED (CGPA ≥ 7.50)
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4 text-rose-500" /> MERIT LOCKED (CGPA &lt; 7.50)
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── STATE 1: LOCKED (CGPA < 7.50) ─────────────────────────────────── */}
+        {!isUnlocked && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-2xl mx-auto rounded-3xl border border-slate-200 bg-white p-8 sm:p-12 text-center space-y-6 shadow-sm"
+          >
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-rose-600 mx-auto">
+              <Lock className="h-8 w-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold px-3 py-1 uppercase border border-rose-200 tracking-wider">
+                ACADEMIC MERIT GATE
+              </span>
+              <h2 className="text-xl sm:text-2xl font-extrabold uppercase text-slate-900 tracking-wide">
+                HONOR EXAM IS LOCKED
+              </h2>
+              <p className="text-xs text-slate-500 font-sans max-w-md mx-auto leading-relaxed">
+                The 1-Hour 5-Question Subjective Examination is reserved for students who maintain a <strong className="text-indigo-700 font-mono">CGPA of 7.50 or higher</strong> through daily revision quizzes and critical thinking assessments.
               </p>
             </div>
 
-            {!evaluationResult && !loading && (
-              <div className="flex flex-col items-center justify-center h-64 text-center text-zinc-500 space-y-3">
-                <BookOpen className="h-10 w-10 text-zinc-600" />
-                <p className="text-xs max-w-xs">
-                  Submit your written essay response to receive instant Gemini AI scoring & detailed breakdown.
-                </p>
+            {/* CGPA Progress Meter */}
+            <div className="max-w-sm mx-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2.5 font-mono">
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-slate-500">YOUR CURRENT CGPA</span>
+                <span className="text-indigo-700">{userProfile?.cgpa.toFixed(2)} / 7.50</span>
               </div>
-            )}
-
-            {loading && (
-              <div className="flex flex-col items-center justify-center h-64 text-center space-y-3 text-indigo-400">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="text-xs font-semibold text-zinc-300">
-                  Analyzing arguments against prompt requirements...
-                </p>
+              <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-teal-500 transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(0, ((userProfile?.cgpa ?? 0) / 7.5) * 100))}%` }}
+                />
               </div>
-            )}
+              <div className="text-[11px] text-slate-500 text-right">
+                {((7.5 - (userProfile?.cgpa ?? 0)) > 0)
+                  ? `+${(7.5 - (userProfile?.cgpa ?? 0)).toFixed(2)} CGPA needed to unlock`
+                  : 'Condition Met!'}
+              </div>
+            </div>
 
-            {evaluationResult && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="space-y-5 text-xs"
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <Link
+                href="/quest-log"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition-all"
               >
-                {/* Score Banner */}
-                <div className="rounded-xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/60 to-purple-950/60 p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-indigo-300">
-                      Evaluated Score
-                    </span>
-                    <div className="text-3xl font-extrabold text-white">
-                      {evaluationResult.score} <span className="text-sm font-normal text-zinc-400">/ 10.0</span>
+                <Zap className="h-4 w-4 fill-current" /> TAKE DAILY QUIZ (BOOST CGPA)
+              </Link>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── STATE 2: UNLOCKED (CGPA >= 7.50) ───────────────────────────────── */}
+        {isUnlocked && (
+          <div className="space-y-6">
+            {/* Top Exam Status & Countdown Timer Bar */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-6 py-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-900">
+                  <Clock className="h-4 w-4 text-indigo-600" /> OFFICIAL 60-MINUTE TIMED EXAMINATION
+                </div>
+                <div className="text-xs text-indigo-800/80 font-sans">
+                  {userProfile ? FIELD_LABELS[userProfile.student_field] : 'Academic'} • 5 In-depth Subjective Prompts (Max 1000 Pts Total)
+                </div>
+              </div>
+
+              {/* Timer Controls */}
+              <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-xs self-stretch md:self-auto justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className={`h-4 w-4 ${isTimerRunning ? 'text-indigo-600 animate-pulse' : 'text-slate-400'}`} />
+                  <span className={`text-lg font-bold font-mono ${timeLeft < 300 ? 'text-rose-600' : 'text-slate-900'}`}>
+                    {formatTime(timeLeft)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setIsTimerRunning((v) => !v)}
+                    className="p-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-900 transition-colors text-xs font-bold flex items-center gap-1"
+                  >
+                    {isTimerRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    {isTimerRunning ? 'PAUSE' : 'START'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsTimerRunning(false)
+                      setTimeLeft(60 * 60)
+                    }}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors text-[10px]"
+                    title="Reset Exam Timer"
+                  >
+                    RESET
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Col: 5 Questions Navigator (4 cols) */}
+              <div className="lg:col-span-4 space-y-3">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between pb-1">
+                  <span>Exam Questions (1 to 5)</span>
+                  <span className="text-[10px] text-indigo-600 font-mono font-bold">
+                    {Object.keys(evaluations).length}/5 Evaluated
+                  </span>
+                </div>
+
+                {examPrompts.map((prompt, idx) => {
+                  const isSelected = activeQuestionIdx === idx
+                  const hasAnswer = (answers[prompt.id] || '').trim().length > 0
+                  const hasEval = Boolean(evaluations[prompt.id])
+
+                  return (
+                    <button
+                      key={prompt.id}
+                      onClick={() => setActiveQuestionIdx(idx)}
+                      className={`w-full text-left p-4 rounded-2xl border transition-all ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-50/80 shadow-xs'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold font-mono text-indigo-700 uppercase">
+                          QUESTION #{idx + 1}
+                        </span>
+                        {hasEval ? (
+                          <span className="rounded bg-emerald-100 text-emerald-800 text-[9px] font-mono px-1.5 py-0.5 font-bold">
+                            {evaluations[prompt.id].quality_score + evaluations[prompt.id].uniqueness_score}/200 PTS
+                          </span>
+                        ) : hasAnswer ? (
+                          <span className="rounded bg-amber-100 text-amber-800 text-[9px] font-mono px-1.5 py-0.5 font-bold">
+                            DRAFTED
+                          </span>
+                        ) : (
+                          <span className="rounded bg-slate-100 text-slate-500 text-[9px] font-mono px-1.5 py-0.5 font-bold">
+                            UNANSWERED
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-extrabold text-slate-900 mt-1.5 line-clamp-1">{prompt.title}</div>
+                      <div className="text-[11px] text-slate-500 mt-1 line-clamp-2">{prompt.promptText}</div>
+                      <div className="mt-2 text-[10px] text-slate-400 flex items-center justify-between font-mono">
+                        <span>~{prompt.suggestedWords} words</span>
+                        <span>⏱️ {prompt.timeMinutes}m target</span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Right Col: Active Question Workspace & Live Evaluation (8 cols) */}
+              <div className="lg:col-span-8 space-y-6">
+                {activePrompt && (
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-5 shadow-sm">
+                    <div className="space-y-1.5 border-b border-slate-100 pb-4">
+                      <div className="text-[10px] font-mono font-bold text-indigo-600 uppercase tracking-widest">
+                        QUESTION {activeQuestionIdx + 1} OF 5 • {FIELD_LABELS[activePrompt.field]}
+                      </div>
+                      <h3 className="text-lg font-extrabold text-slate-900">{activePrompt.title}</h3>
+                      <p className="text-xs text-slate-600 leading-relaxed pt-1">{activePrompt.promptText}</p>
+                    </div>
+
+                    {/* Answer Textarea */}
+                    <div className="relative">
+                      <textarea
+                        rows={11}
+                        value={answers[activePrompt.id] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setAnswers((prev) => ({ ...prev, [activePrompt.id]: val }))
+                          if (!isTimerRunning && val.length === 1) setIsTimerRunning(true)
+                        }}
+                        placeholder="Write your comprehensive analysis response here... Include definitions, real-world case examples, and edge-case boundary conditions."
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-1 focus:ring-indigo-600 font-mono leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Word count & Submit Current Question */}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {currentAnswer.trim().split(/\s+/).filter(Boolean).length} words / ~{activePrompt.suggestedWords} suggested
+                        <span className="ml-2 text-emerald-700 font-bold">• Max 200 PTS</span>
+                      </span>
+
+                      <button
+                        onClick={handleEvaluateCurrent}
+                        disabled={evaluatingQuestionId === activePrompt.id || !currentAnswer.trim()}
+                        className="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                      >
+                        {evaluatingQuestionId === activePrompt.id ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" /> GRADING RESPONSE...</>
+                        ) : (
+                          <><Send className="h-4 w-4" /> SUBMIT QUESTION #{activeQuestionIdx + 1}</>
+                        )}
+                      </button>
                     </div>
                   </div>
-                  <div className="h-12 w-12 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold">
-                    <Award className="h-6 w-6" />
-                  </div>
-                </div>
-
-                {/* Feedback */}
-                <div>
-                  <strong className="block text-zinc-200 mb-1 font-semibold">Constructive Feedback</strong>
-                  <p className="text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/10 leading-relaxed">
-                    {evaluationResult.feedback}
-                  </p>
-                </div>
-
-                {/* Strengths */}
-                {evaluationResult.strengths?.length > 0 && (
-                  <div>
-                    <strong className="block text-emerald-400 mb-1 font-semibold">Key Strengths</strong>
-                    <ul className="space-y-1">
-                      {evaluationResult.strengths.map((str: string, idx: number) => (
-                        <li key={idx} className="flex items-start gap-1.5 text-zinc-300">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                          <span>{str}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
                 )}
 
-                {/* Improvements */}
-                {evaluationResult.improvements?.length > 0 && (
-                  <div>
-                    <strong className="block text-amber-400 mb-1 font-semibold">Areas for Growth</strong>
-                    <ul className="space-y-1">
-                      {evaluationResult.improvements.map((imp: string, idx: number) => (
-                        <li key={idx} className="flex items-start gap-1.5 text-zinc-300">
-                          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                          <span>{imp}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                {/* Individual Question Evaluation Card */}
+                {currentEval && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-6 sm:p-8 space-y-5 shadow-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-emerald-800 uppercase tracking-widest">
+                        QUESTION #{activeQuestionIdx + 1} EVALUATION REPORT
+                      </span>
+                      <div className="text-xl font-extrabold font-mono text-emerald-950">
+                        {currentEval.quality_score + currentEval.uniqueness_score}
+                        <span className="text-xs text-emerald-700">/200 PTS</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 font-mono text-xs">
+                      <div className="rounded-xl border border-emerald-100 bg-white p-3 shadow-2xs">
+                        <span className="text-slate-500">Quality Score:</span>{' '}
+                        <strong className="text-indigo-700">{currentEval.quality_score}/100</strong>
+                      </div>
+                      <div className="rounded-xl border border-emerald-100 bg-white p-3 shadow-2xs">
+                        <span className="text-slate-500">Originality / Uniqueness:</span>{' '}
+                        <strong className="text-amber-700">{currentEval.uniqueness_score}/100</strong>
+                      </div>
+                    </div>
+
+                    {currentEval.feedback && (
+                      <div className="text-xs text-slate-800 leading-relaxed bg-white p-4 rounded-xl border border-emerald-100 font-mono">
+                        <strong className="text-emerald-800 block mb-1">Examiner Assessment:</strong>
+                        {currentEval.feedback}
+                      </div>
+                    )}
+
+                    {/* Strengths & Improvements */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-sans">
+                      {currentEval.strengths?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <strong className="block text-emerald-800 font-semibold">Strengths</strong>
+                          <ul className="space-y-1">
+                            {currentEval.strengths.map((st: string, i: number) => (
+                              <li key={i} className="flex items-start gap-1.5 text-slate-700">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                <span>{st}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {currentEval.improvements?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <strong className="block text-amber-800 font-semibold">Areas for Growth</strong>
+                          <ul className="space-y-1">
+                            {currentEval.improvements.map((imp: string, i: number) => (
+                              <li key={i} className="flex items-start gap-1.5 text-slate-700">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                <span>{imp}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
                 )}
-              </motion.div>
-            )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </main>
   )
 }

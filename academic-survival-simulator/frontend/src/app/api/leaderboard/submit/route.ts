@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { calculateGPA } from '@/lib/pythonService'
 import { GamificationEngine } from '@/lib/services/gamificationEngine'
 
@@ -73,8 +74,10 @@ export async function POST(request: NextRequest) {
       is_premium: isPremium,
     })
 
-    // 7. Persist updated CGPA in `users` table
-    await supabase
+    // 7. Persist updated CGPA and leaderboard score via secure admin client
+    const adminSupabase = createAdminClient()
+
+    await adminSupabase
       .from('users')
       .update({ cgpa: serverCalculatedCGPA })
       .eq('id', user.id)
@@ -82,7 +85,7 @@ export async function POST(request: NextRequest) {
     // 8. Upsert leaderboard score
     const leaderboardScore = serverCalculatedCGPA * 100.0 // Convert 0-10 CGPA to 0-1000 leaderboard score scale
 
-    const { error: lbError } = await supabase.from('leaderboard').upsert(
+    const { error: lbError } = await adminSupabase.from('leaderboard').upsert(
       {
         user_id: user.id,
         display_name: displayName,

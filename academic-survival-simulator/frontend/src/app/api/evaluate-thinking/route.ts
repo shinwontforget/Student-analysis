@@ -291,7 +291,7 @@ ${sanitizedResponse}
   } catch (err: any) {
     console.error('[Evaluate Thinking API Handler Error]:', err)
     return NextResponse.json(
-      { error: err.message || 'Internal Server Error' },
+      { error: 'An internal error occurred. Please try again.' },
       { status: 500 }
     )
   }
